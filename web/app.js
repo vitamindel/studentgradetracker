@@ -1,11 +1,5 @@
-// =====================================================================
-//  app.js - the website's "skin"
-// ---------------------------------------------------------------------
-//  There is NO grade logic in this file. Every button builds a text
-//  command and sends it to the C++ engine with cpp("..."). After every
-//  change we ask C++ for "json" (a snapshot of the whole class) and
-//  redraw the page from that.
-// =====================================================================
+// app.js - the website's UI. No grade logic here: every button sends a text
+// command to C++ with cpp("..."), then the page is redrawn from C++'s "json".
 import { loadEngine, quote } from "./engine.js";
 
 const STORAGE_KEY = "gradebookpp:v1";
@@ -29,9 +23,7 @@ const ui = {
   selectedId: null,    // student open in the side panel
 };
 
-// =====================================================================
-//  SMALL HELPERS
-// =====================================================================
+// ----- SMALL HELPERS -----
 
 // Names come from users, so they are escaped before going into HTML.
 // "<b>Bob</b>" shows up as text instead of becoming bold.
@@ -68,13 +60,10 @@ function storageSet(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
 }
 
-// =====================================================================
-//  TALKING TO C++
-// =====================================================================
+// ----- TALKING TO C++ -----
 
-// EVERY call into the C++ engine goes through here, so the console can
-// show the exact command and the exact cout output.
-//   source: "ui" (a button), "auto" (background refresh), "you" (typed)
+// Every call into C++ goes through here so the console can log it.
+// source: "ui" (button), "auto" (background refresh), or "you" (typed)
 function cpp(command, source = "ui") {
   const start = performance.now();
   let output;
@@ -120,9 +109,7 @@ function doUndo() {
   act("undo", { undoable: false });
 }
 
-// =====================================================================
-//  SAVING (localStorage holds the C++ CSV export + settings)
-// =====================================================================
+// ----- SAVING (localStorage holds the C++ CSV export + settings) -----
 let saveTimer = null;
 
 function scheduleSave() {
@@ -180,9 +167,7 @@ function savePrefs() {
   storageSet(PREFS_KEY, { sort: ui.sort });
 }
 
-// =====================================================================
-//  RENDERING
-// =====================================================================
+// ----- RENDERING -----
 function render() {
   renderHeader();
   renderTiles();
@@ -439,9 +424,7 @@ function renderRoster() {
   }
 }
 
-// =====================================================================
-//  SEARCH (asks C++ "find" and keeps the IDs it lists)
-// =====================================================================
+// ----- SEARCH (asks C++ "find" and keeps the IDs it lists) -----
 function runSearch(text) {
   ui.searchText = text.trim();
   if (!ui.searchText) {
@@ -457,9 +440,7 @@ function runSearch(text) {
   ui.searchIds = new Set([...out.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
 }
 
-// =====================================================================
-//  STUDENT DETAIL DRAWER
-// =====================================================================
+// ----- STUDENT DETAIL DRAWER -----
 const drawer = $("#drawer");
 let drawerReturnFocus = null;
 
@@ -659,9 +640,7 @@ $("#need-form").addEventListener("submit", (e) => {
     : out.includes("already safe") ? "ok" : "");
 });
 
-// =====================================================================
-//  DIALOGS
-// =====================================================================
+// ----- DIALOGS -----
 
 // Opens a yes/no dialog and resolves to true/false.
 function confirmDialog(title, text, okLabel = "Confirm") {
@@ -798,18 +777,14 @@ $("#form-settings").addEventListener("submit", (e) => {
   $("#dlg-settings").close();
 });
 
-// =====================================================================
-//  CSV EXPORT / IMPORT (the C++ export/import commands do the work)
-// =====================================================================
+// ----- CSV EXPORT / IMPORT (the C++ export/import commands do the work) -----
 function exportCsv() {
   const csv = cpp("export");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `${state.className.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "class"}-grades.csv`;
-  // Start the download AFTER the menu's click event has finished. Clicking
-  // the link while that click was still being handled made Chrome silently
-  // skip the download (see DEBUG_LOG.md, "Export did nothing").
+  // Chrome skipped the download when started inside the menu's click (DEBUG_LOG #11).
   setTimeout(() => {
     document.body.appendChild(link);
     link.click();
@@ -831,9 +806,7 @@ $("#file-input").addEventListener("change", async (e) => {
   act("import\n" + text);
 });
 
-// =====================================================================
-//  THEME
-// =====================================================================
+// ----- THEME -----
 function currentTheme() {
   return document.documentElement.dataset.theme || "system";
 }
@@ -854,9 +827,7 @@ $("#theme-btn").addEventListener("click", () => {
   setTheme(order[(order.indexOf(currentTheme()) + 1) % order.length]);
 });
 
-// =====================================================================
-//  TOASTS + TOOLTIP
-// =====================================================================
+// ----- TOASTS + TOOLTIP -----
 function toast(message, type = "success", action = null) {
   const el = document.createElement("div");
   el.className = `toast toast-${type}`;
@@ -917,9 +888,7 @@ document.addEventListener("focusin", (e) => {
 document.addEventListener("focusout", hideTip);
 window.addEventListener("scroll", hideTip, { passive: true });
 
-// =====================================================================
-//  C++ CONSOLE
-// =====================================================================
+// ----- C++ CONSOLE -----
 const consoleLog = $("#console-log");
 let commandCount = 0;
 const cmdHistory = [];
@@ -1009,9 +978,7 @@ $("#console-cmd").addEventListener("keydown", (e) => {
   }
 });
 
-// =====================================================================
-//  WIRING: buttons, menu, keyboard
-// =====================================================================
+// ----- WIRING: buttons, menu, keyboard -----
 async function runAction(action) {
   closeMenu();
   if (action === "add") openAddStudent();
@@ -1143,9 +1110,7 @@ new ResizeObserver(() => {
   });
 }).observe(document.body);
 
-// =====================================================================
-//  BOOT: download the .wasm, start C++, restore saved data
-// =====================================================================
+// ----- BOOT: download the .wasm, start C++, restore saved data -----
 async function boot() {
   setTheme(currentTheme());
   const bootEl = $("#boot");

@@ -1,33 +1,21 @@
-// =====================================================================
-//  main.cpp  -  TERMINAL version of the Student Grade Tracker
-// ---------------------------------------------------------------------
-//  This is the backup version that runs in OnlineGDB (or any terminal).
-//  It uses the SAME Student / GradeBook / CommandShell classes as the
-//  website, but talks to the user with a cin/cout menu instead of buttons.
-//
-//  Compile:  g++ -std=c++17 -Wall -Wextra main.cpp -o tracker
-// =====================================================================
+// main.cpp - terminal version of the Student Grade Tracker (a cin/cout menu).
+// Uses the same classes as the website.
+// Compile:  g++ -std=c++17 -Wall -Wextra main.cpp -o tracker
 #include "Student.h"
 #include "GradeBook.h"
 #include "CommandShell.h"
 
-#include <iostream>   // cin, cout
-#include <iomanip>    // setw, setprecision, fixed
-#include <limits>     // numeric_limits (used to clear bad input)
-#include <sstream>    // istringstream (used to read "blank = skip" answers)
+#include <iostream>
+#include <iomanip>
+#include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <cstdlib>    // exit()
+#include <cstdlib>
 
-// "using namespace std" lets us write cout instead of std::cout.
-// It's fine in a .cpp file like this one, but we avoid it in the .h files
-// so we don't force it on every file that includes them.
 using namespace std;
 
-// =====================================================================
-//  COLORS  (ANSI escape codes). Set FANCY_UI to false if your terminal
-//  shows weird symbols like "[32m" instead of colors.
-// =====================================================================
+// Set to false if your terminal shows codes like "[32m" instead of colors.
 const bool FANCY_UI = true;
 
 const string BOLD = "1";
@@ -39,15 +27,14 @@ const string BLUE = "34";
 const string MAGENTA = "35";
 const string CYAN = "36";
 
-// Wraps text in a color code, e.g. paint("Passed", GREEN)
+// paint("Passed", GREEN) -> green text
 string paint(const string& text, const string& code) {
     if (!FANCY_UI) {
-        return text;   // plain text when colors are turned off
+        return text;
     }
     return "\033[" + code + "m" + text + "\033[0m";
 }
 
-// Which color goes with which status?
 string statusColor(const string& status) {
     if (status == "Passed") return GREEN;
     if (status == "Needs Improvement") return YELLOW;
@@ -55,7 +42,6 @@ string statusColor(const string& status) {
     return DIM;   // "No Grades"
 }
 
-// Trend as a short symbol: ^ up, v down, = steady
 string trendSymbol(const string& trend) {
     if (trend == "up") return paint("^ up", GREEN);
     if (trend == "down") return paint("v down", RED);
@@ -63,14 +49,14 @@ string trendSymbol(const string& trend) {
     return paint("-", DIM);
 }
 
-// A number as text with 1 decimal place, e.g. oneDecimal(92.456) -> "92.5"
+// oneDecimal(92.456) -> "92.5"
 string oneDecimal(double value) {
     ostringstream out;
     out << fixed << setprecision(1) << value;
     return out.str();
 }
 
-// A row of the same character, e.g. repeatChar('#', 5) -> "#####"
+// repeatChar('#', 5) -> "#####"
 string repeatChar(char c, int count) {
     string result = "";
     for (int i = 0; i < count; i++) {
@@ -90,17 +76,9 @@ void printHeader(const string& title) {
     printLine();
 }
 
-// =====================================================================
-//  SAFE INPUT HELPERS
-//  If someone types "abc" when we asked for a number, cin goes into a
-//  "fail" state and every later cin >> is ignored. These helpers fix that:
-//    1. cin.fail()   -> did the last read go wrong?
-//    2. cin.clear()  -> reset the error flag so cin works again
-//    3. cin.ignore() -> throw away the rest of the bad line
-// =====================================================================
+// ----- Safe input: on bad input, cin.clear() resets cin and cin.ignore() drops the line -----
 
-// If the input ran out completely (e.g. Ctrl+D), quit cleanly instead of
-// looping forever. (eof + fail together means "tried to read, nothing left".)
+// Quit cleanly if the input runs out (e.g. Ctrl+D) instead of looping forever.
 void exitIfInputEnded() {
     if (cin.eof() && cin.fail()) {
         cout << "\n\nInput ended. Goodbye!\n";
@@ -119,9 +97,9 @@ int readInt(const string& prompt, int low, int high) {
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
             cout << paint("  Please type a whole number.\n", RED);
-            continue;   // ask again
+            continue;
         }
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');   // eat the leftover Enter key
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');   // drop the leftover Enter
         if (value < low || value > high) {
             cout << paint("  Please choose from " + to_string(low) + " to " + to_string(high) + ".\n", RED);
             continue;
@@ -152,19 +130,17 @@ double readDouble(const string& prompt, double low, double high) {
     }
 }
 
-// Reads a whole line of text (names can have spaces, so we use getline).
+// getline reads a whole line, so names can have spaces.
 string readLine(const string& prompt) {
     cout << prompt;
     string text;
     getline(cin, text);
     exitIfInputEnded();
-    // trim spaces off both ends
     while (!text.empty() && (text.back() == ' ' || text.back() == '\r')) text.pop_back();
     while (!text.empty() && text[0] == ' ') text.erase(0, 1);
     return text;
 }
 
-// Asks until the user types a valid grade type.
 string readType(const string& prompt) {
     while (true) {
         string type = Student::normalizeType(readLine(prompt));
@@ -175,7 +151,6 @@ string readType(const string& prompt) {
     }
 }
 
-// Asks for a student ID until it matches someone in the gradebook.
 // Returns 0 if the class is empty.
 int readStudentId(GradeBook& book) {
     if (book.size() == 0) {
@@ -196,11 +171,6 @@ bool askYesNo(const string& prompt) {
     return answer == "y" || answer == "Y" || answer == "yes";
 }
 
-// =====================================================================
-//  DISPLAY HELPERS
-// =====================================================================
-
-// Shows one Student object's info (used for the three rubric objects).
 void displayStudent(const Student& s, double passCutoff, double needsCutoff) {
     string status = s.status(passCutoff, needsCutoff);
     cout << "  " << paint(s.getName(), BOLD) << paint("  (ID " + to_string(s.getId()) + ")", DIM) << "\n";
@@ -211,9 +181,7 @@ void displayStudent(const Student& s, double passCutoff, double needsCutoff) {
     cout << "     Status: " << paint(status, statusColor(status)) << "\n";
 }
 
-// =====================================================================
-//  MENU OPTIONS  (one function per menu choice)
-// =====================================================================
+// ----- One function per menu option -----
 
 // 1) View roster
 void viewRoster(const GradeBook& book) {
@@ -235,7 +203,7 @@ void viewRoster(const GradeBook& book) {
         } else {
             cout << setw(6) << "--" << "  " << left << setw(4) << "-" << right << setw(3) << "-" << "  ";
         }
-        // trendSymbol() contains invisible color codes, so we pad by hand
+        // Color codes are invisible but count for setw, so pad by hand
         string trend = s.trend();
         int trendWidth = (trend == "up") ? 4 : (trend == "down") ? 6 : (trend == "steady") ? 8 : 1;
         cout << trendSymbol(trend) << repeatChar(' ', 10 - trendWidth);
@@ -249,7 +217,7 @@ void viewRoster(const GradeBook& book) {
          << book.getNeedsCutoff() << ")\n";
 }
 
-// 2) Add a student (uses the parameterized constructor inside addStudent)
+// 2) Add a student
 void addStudentMenu(GradeBook& book) {
     printHeader("Add a Student");
     string name = readLine("  Full name: ");
@@ -296,7 +264,7 @@ void classAssignmentMenu(GradeBook& book) {
             if (answer.empty()) {
                 break;   // skipped
             }
-            istringstream reader(answer);   // read a number out of the text
+            istringstream reader(answer);
             double score;
             reader >> score;
             if (!reader.fail() && Student::isValidScore(score)) {
@@ -357,7 +325,7 @@ void statsMenu(const GradeBook& book) {
          << "    " << paint("Needs Improvement " + to_string(book.countStatus("Needs Improvement")), YELLOW)
          << "    " << paint("Failed " + to_string(book.countStatus("Failed")), RED) << "\n";
 
-    // --- Chart 1: each student's average. 1 '#' = 2.5 percentage points ---
+    // Chart 1: each student's average (1 '#' = 2.5 points)
     cout << "\n  " << paint("Student averages", BOLD)
          << paint("   ('|' marks the pass cutoff)", DIM) << "\n";
     int passColumn = static_cast<int>(book.getPassCutoff() / 2.5);
@@ -365,7 +333,6 @@ void statsMenu(const GradeBook& book) {
         if (!s.hasGrades()) continue;
         int length = static_cast<int>(s.average() / 2.5 + 0.5);
         if (length > 40) length = 40;
-        // Draw the bar, then spaces, with a '|' at the pass cutoff position
         string chart = "";
         for (int i = 0; i < 40; i++) {
             if (i < length) chart += '#';
@@ -378,7 +345,7 @@ void statsMenu(const GradeBook& book) {
              << paint(chart, statusColor(book.statusOf(s))) << " " << s.average() << "\n";
     }
 
-    // --- Chart 2: letter grade distribution ---
+    // Chart 2: letter grades
     cout << "\n  " << paint("Letter grades", BOLD) << "\n";
     string letters[5] = {"A", "B", "C", "D", "F"};
     string letterColors[5] = {GREEN, CYAN, BLUE, YELLOW, RED};
@@ -471,17 +438,17 @@ void undoMenu(GradeBook& book) {
     else cout << paint("\n  Undid: " + what + "\n", GREEN);
 }
 
-// 12) Command mode: type the SAME text commands the website sends
+// 12) Command mode: the same text commands the website sends
 void commandMode(CommandShell& shell) {
     printHeader("Command Mode  (type 'help' for commands, 'back' to return)");
     cout << paint("  These are the exact commands the website's buttons send to C++.\n", DIM);
     while (true) {
         cout << paint("cmd> ", CYAN);
-        if (!shell.execute(cin, cout)) {   // false = "back" (or input ended)
+        if (!shell.execute(cin, cout)) {
             break;
         }
     }
-    cin.clear();   // in case input ended while in command mode
+    cin.clear();
 }
 
 void printMenu() {
@@ -497,56 +464,42 @@ void printMenu() {
          << "   0) Exit\n";
 }
 
-// =====================================================================
-//  main(): the program starts here
-// =====================================================================
 int main() {
-    // Show every decimal number with exactly 1 digit after the point.
-    cout << fixed << setprecision(1);
+    cout << fixed << setprecision(1);   // 1 decimal place everywhere
 
     cout << "\n" << paint("  ===  STUDENT GRADE TRACKER  ===", BOLD + ";" + CYAN) << "\n";
     cout << paint("  Weights: Test x2, Project x1.5, Quiz x1, Homework x0.5", DIM) << "\n";
 
-    // -----------------------------------------------------------------
-    //  Create 3 Student OBJECTS with the PARAMETERIZED CONSTRUCTOR.
-    //  Each call sets the student's name, ID, and starting grade.
-    // -----------------------------------------------------------------
+    // 3 Student objects made with the parameterized constructor (name, ID, starting grade)
     Student student1("Ava Chen", 1001, 92.5);
     Student student2("Marcus Johnson", 1002, 72.0);
     Student student3("Ethan Brooks", 1003, 55.0);
 
-    // Give each one a test score too, so the weighted average matters.
     student1.addGrade("Unit 1 Test", "Test", 95);
     student2.addGrade("Unit 1 Test", "Test", 62);
     student3.addGrade("Unit 1 Test", "Test", 50);
 
-    // Status cutoffs (the teacher can change these later in the gradebook).
     double passCutoff = 70;
     double needsCutoff = 60;
 
-    // Display each object's info, including its status.
     printHeader("Our 3 starting Student objects");
     displayStudent(student1, passCutoff, needsCutoff);
     displayStudent(student2, passCutoff, needsCutoff);
     displayStudent(student3, passCutoff, needsCutoff);
 
-    // A basic calculation across the objects: the class average.
     double classAverage = (student1.average() + student2.average() + student3.average()) / 3.0;
     cout << "\n  Class average of these 3: " << paint(oneDecimal(classAverage) + "%", BOLD) << "\n";
 
-    // Put the 3 objects into a GradeBook so the menu can work with them.
+    // Move the 3 objects into a GradeBook for the menu.
     GradeBook book;
     book.setClassName("Period 3 - Chemistry");
     book.addExistingStudent(student1);
     book.addExistingStudent(student2);
     book.addExistingStudent(student3);
-    book.clearUndoHistory();   // start with a clean undo history
+    book.clearUndoHistory();
 
-    CommandShell shell(book);  // the same command interpreter the website uses
+    CommandShell shell(book);
 
-    // -----------------------------------------------------------------
-    //  MENU LOOP: keep going until the user picks 0
-    // -----------------------------------------------------------------
     bool running = true;
     while (running) {
         printMenu();
@@ -564,7 +517,7 @@ int main() {
         else if (choice == 10) removeMenu(book);
         else if (choice == 11) undoMenu(book);
         else if (choice == 12) commandMode(shell);
-        else running = false;   // 0 = exit
+        else running = false;
     }
 
     cout << paint("\n  Goodbye! Keep those grades up.\n\n", CYAN);

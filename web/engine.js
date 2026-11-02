@@ -1,25 +1,14 @@
-// =====================================================================
-//  engine.js - loads the C++ engine (gradebook.wasm) and talks to it.
-//
-//  The .wasm file was compiled for "WASI", a standard set of operating-
-//  system functions (write to a file, read the clock, exit, ...). A browser
-//  isn't an operating system, so we hand-write tiny fake versions of the
-//  few WASI functions our C++ actually imports. That's the "WASI shim".
-//
-//  Used by app.js in the browser AND by tests/engine_test.mjs in Node.
-// =====================================================================
+// engine.js - loads gradebook.wasm and talks to it. The browser has no
+// operating system, so we fake the few WASI system functions the C++ uses.
+// Used by app.js and by tests/engine_test.mjs.
 
 const ERRNO_SUCCESS = 0;
 const ERRNO_BADF = 8;     // "bad file descriptor"
 const ERRNO_NOSYS = 52;   // "function not implemented"
 const ERRNO_SPIPE = 70;   // "can't seek on this kind of file"
 
-/**
- * Turns the raw bytes of gradebook.wasm into an object with run(command).
- * @param {ArrayBuffer} wasmBytes  e.g. from (await fetch("gradebook.wasm")).arrayBuffer()
- * @param {(text: string) => void} [onStray]  gets anything C++ printed to the
- *        REAL stdout/stderr (normally nothing, because run() redirects cout)
- */
+// Returns an object with run(command). onStray gets anything printed to the
+// real stdout/stderr (normally nothing, since run() redirects cout).
 export async function loadEngine(wasmBytes, onStray = () => {}) {
   let memory = null;   // set right after instantiation
   const encoder = new TextEncoder();
@@ -101,9 +90,7 @@ export async function loadEngine(wasmBytes, onStray = () => {}) {
   const exp = instance.exports;
   memory = exp.memory;
 
-  // A "reactor" module has no main(). _initialize() runs the C++ global
-  // constructors (std::cout itself, and our global GradeBook + CommandShell).
-  // Calling run() before this would use objects that were never built.
+  // Builds the C++ globals (cout, our GradeBook and CommandShell) before any run().
   exp._initialize();
 
   /** Sends one command to C++ and returns everything it printed with cout. */

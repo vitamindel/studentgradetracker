@@ -1,73 +1,41 @@
-// =====================================================================
-//  Student.h  -  ONE student and all of their grades
-// ---------------------------------------------------------------------
-//  Think of a Student object like a single index card in a teacher's
-//  recipe box: the front has the name and ID, the back has a list of
-//  every grade they ever got. The card can also do math about itself
-//  (its own average, letter grade, status, and so on).
-//
-//  Java comparison: this whole file is basically "public class Student"
-//  with the method bodies written right inside the class, just like Java.
-// =====================================================================
-#pragma once   // "only include this file once" (stops duplicate definitions)
+// Student.h - one student: their name, ID, and grade history.
+#pragma once
 
-#include <string>   // std::string  (like Java's String)
-#include <vector>   // std::vector  (like Java's ArrayList)
-#include <cctype>   // std::tolower, std::isspace
+#include <string>
+#include <vector>
+#include <cctype>
 
-// ---------------------------------------------------------------------
-//  GradeEntry: one row in a student's grade history.
-//  A "struct" is just a class whose members are public by default.
-//  Java analogy: a tiny class with three public fields and no methods.
-// ---------------------------------------------------------------------
+// One grade in a student's history (a struct is a class with public members).
 struct GradeEntry {
-    std::string label;  // what the assignment was called, e.g. "Unit 2 Test"
-    std::string type;   // one of: Test, Project, Quiz, Homework
-    double score;       // a percentage from 0 to 120 (over 100 = extra credit)
+    std::string label;  // e.g. "Unit 2 Test"
+    std::string type;   // Test, Project, Quiz, or Homework
+    double score;       // 0 to 120 (over 100 = extra credit)
 };
 
 class Student {
 private:
-    // ----- PRIVATE data: only Student's own methods can touch these -----
-    // (Same idea as "private" fields in Java: other code must go through
-    //  the public methods, so nobody can put a student in a broken state.)
     std::string name;
     int id;
-    std::vector<GradeEntry> grades;   // the full grade history, oldest first
+    std::vector<GradeEntry> grades;   // oldest first
 
 public:
-    // Passing NO_GRADE as the starting grade means "start with no grades".
-    // "static const" = one shared constant for the whole class (like Java's
-    // "public static final").
-    static const int NO_GRADE = -1;
+    static const int NO_GRADE = -1;   // "start with no grades"
 
-    // =================================================================
-    //  PARAMETERIZED CONSTRUCTOR
-    //  Runs automatically when we write:  Student s("Ava Chen", 1001, 92);
-    //  It sets the student's name, ID, and their first (starting) grade.
-    // =================================================================
+    // Parameterized constructor: Student s("Ava Chen", 1001, 92);
     Student(const std::string& name, int id, double startingGrade) {
-        // "this->name" is the field, "name" is the parameter (same as Java).
         this->name = name;
         this->id = id;
 
-        // Record the starting grade as the first entry in their history.
-        // It is stored as a Quiz because a Quiz has the "normal" 1x weight.
+        // The starting grade counts as a Quiz (normal 1x weight).
         if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
             grades.push_back({"Starting Grade", "Quiz", startingGrade});
         }
     }
 
-    // =================================================================
-    //  STATIC HELPERS about grade types (they don't need a specific
-    //  student, so they are "static", exactly like Java static methods)
-    // =================================================================
-
-    // Turns whatever the user typed ("test", "T", "hw", "QUIZ") into one of
-    // the four official type names. Returns "" (empty) if it isn't valid.
+    // Turns "test", "T", "hw", ... into an official type name, or "" if invalid.
     static std::string normalizeType(const std::string& raw) {
         std::string t = "";
-        for (char c : raw) {   // "for each char c in raw" (like Java's for-each)
+        for (char c : raw) {
             t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
         if (t == "test" || t == "t" || t == "exam")              return "Test";
@@ -78,50 +46,36 @@ public:
     }
 
     // How much each type counts toward the average.
-    // A Test counts twice as much as a Quiz; Homework counts half as much.
     static double typeWeight(const std::string& type) {
         if (type == "Test")     return 2.0;
         if (type == "Project")  return 1.5;
         if (type == "Quiz")     return 1.0;
         if (type == "Homework") return 0.5;
-        return 0.0;   // unknown type counts for nothing
+        return 0.0;
     }
 
-    // A score is valid if it is between 0 and 120 (120 allows extra credit).
-    // Note: this also rejects "not a number" values, because NaN fails
-    // every comparison.
     static bool isValidScore(double score) {
         return score >= 0 && score <= 120;
     }
 
-    // =================================================================
-    //  GETTERS and SETTERS  (the "front door" to the private data)
-    // =================================================================
+    // Getters and setters
     std::string getName() const { return name; }
     int getId() const { return id; }
-
-    // "const" after the parentheses promises this method won't change the
-    // student. The "&" returns the real vector (no copy) but read-only.
     const std::vector<GradeEntry>& getGrades() const { return grades; }
-
     int gradeCount() const { return static_cast<int>(grades.size()); }
     bool hasGrades() const { return !grades.empty(); }
-
     void setName(const std::string& newName) { name = newName; }
 
-    // =================================================================
-    //  CHANGING GRADES  (each returns true if it worked, false if not)
-    // =================================================================
     bool addGrade(const std::string& label, const std::string& rawType, double score) {
         std::string type = normalizeType(rawType);
         if (type == "" || !isValidScore(score)) {
-            return false;   // refuse bad data instead of storing it
+            return false;
         }
         grades.push_back({label, type, score});
         return true;
     }
 
-    // index is 0-based here (0 = first grade), just like Java arrays.
+    // index is 0-based
     bool editGrade(int index, double newScore, const std::string& newLabel,
                    const std::string& newRawType) {
         if (index < 0 || index >= gradeCount() || !isValidScore(newScore)) {
@@ -141,12 +95,11 @@ public:
         if (index < 0 || index >= gradeCount()) {
             return false;
         }
-        grades.erase(grades.begin() + index);   // like ArrayList.remove(index)
+        grades.erase(grades.begin() + index);
         return true;
     }
 
-    // Adds "points" to every grade, but never pushes a score above 100.
-    // (Scores already above 100 from extra credit are left alone.)
+    // Adds points to every grade, capped at 100.
     void curveGrades(double points) {
         for (int i = 0; i < gradeCount(); i++) {
             if (grades[i].score < 100) {
@@ -158,14 +111,7 @@ public:
         }
     }
 
-    // =================================================================
-    //  CALCULATIONS
-    // =================================================================
-
-    // Adds up (score x weight) and the total weight.
-    // The "&" means these two variables are passed BY REFERENCE: the
-    // function writes its answers straight into the caller's variables.
-    // (Java can't do this with doubles; C++ can.)
+    // Pass by reference (&): the answers go straight into the caller's variables.
     void weightedTotals(double& weightedSum, double& totalWeight) const {
         weightedSum = 0;
         totalWeight = 0;
@@ -176,20 +122,17 @@ public:
         }
     }
 
-    // WEIGHTED AVERAGE:  sum(score x weight) / sum(weights)
-    // Example: Test 80 (x2) and Quiz 100 (x1) -> (160 + 100) / 3 = 86.7
+    // Weighted average = sum(score x weight) / sum(weights)
     double average() const {
         double weightedSum, totalWeight;
         weightedTotals(weightedSum, totalWeight);
         if (totalWeight == 0) {
-            return 0;   // no grades yet: avoid dividing by zero
+            return 0;
         }
         return weightedSum / totalWeight;
     }
 
-    // The weighted average using only the FIRST "count" grades.
-    // averageOfFirst(3) = "what was the average right after grade #3?"
-    // (The website uses this to draw the running-average line.)
+    // Average using only the first "count" grades (for the running-average line).
     double averageOfFirst(int count) const {
         double weightedSum = 0;
         double totalWeight = 0;
@@ -204,8 +147,6 @@ public:
         return weightedSum / totalWeight;
     }
 
-    // Letter for ANY percentage on the standard 90/80/70/60 scale.
-    // (static, so the GradeBook can also use it for the class average)
     static std::string letterFor(double percent) {
         if (percent >= 90) return "A";
         else if (percent >= 80) return "B";
@@ -214,12 +155,10 @@ public:
         else return "F";
     }
 
-    // This student's letter grade.
     std::string letterGrade() const {
         return letterFor(average());
     }
 
-    // GPA on a 4.0 scale, based on the letter grade.
     double gpa() const {
         std::string letter = letterGrade();
         if (letter == "A") return 4.0;
@@ -229,9 +168,7 @@ public:
         return 0.0;
     }
 
-    // STATUS decision with adjustable cutoffs (the teacher can change them).
-    // Example with cutoffs 70 / 60:   75 -> Passed,  65 -> Needs Improvement,
-    //                                 50 -> Failed
+    // Passed / Needs Improvement / Failed, using the class's cutoffs.
     std::string status(double passCutoff, double needsImprovementCutoff) const {
         if (!hasGrades()) {
             return "No Grades";
@@ -246,14 +183,13 @@ public:
         }
     }
 
-    // TREND: compares the newest grade with the average of all earlier ones.
-    // Returns "up", "down", "steady", or "none" (fewer than 2 grades).
+    // Newest grade vs. the average of the earlier ones: up, down, steady, or none.
     std::string trend() const {
         if (gradeCount() < 2) {
             return "none";
         }
         double sum = 0;
-        for (int i = 0; i < gradeCount() - 1; i++) {   // every grade except the last
+        for (int i = 0; i < gradeCount() - 1; i++) {
             sum += grades[i].score;
         }
         double earlierAverage = sum / (gradeCount() - 1);
@@ -264,18 +200,12 @@ public:
         return "steady";
     }
 
-    // "WHAT DO I NEED?"  What score on the next assignment of this type
-    // would bring the weighted average up (or down) to exactly "target"?
-    //
-    //   (weightedSum + w * x) / (totalWeight + w) = target
-    //   ->  x = (target * (totalWeight + w) - weightedSum) / w
-    //
-    // The answer can be above 100 (impossible) or below 0 (already safe);
-    // the caller decides how to explain that.
+    // Score needed on the next assignment to reach "target":
+    //   x = (target * (totalWeight + w) - weightedSum) / w
     double scoreNeeded(const std::string& rawType, double target) const {
         double w = typeWeight(normalizeType(rawType));
         if (w == 0) {
-            return -1;   // caller should have checked the type first
+            return -1;
         }
         double weightedSum, totalWeight;
         weightedTotals(weightedSum, totalWeight);

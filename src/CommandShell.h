@@ -1,43 +1,21 @@
-// =====================================================================
-//  CommandShell.h  -  turns TEXT COMMANDS into GradeBook actions
-// ---------------------------------------------------------------------
-//  Analogy: the CommandShell is a waiter. You (the website, or a person
-//  typing in the terminal) hand it an order written as text, like
-//
-//        grade 1001 "Unit 3 Quiz" quiz 88
-//
-//  The waiter reads the order with ">>" (from any input stream, e.g. cin),
-//  walks it to the kitchen (the GradeBook / Student objects), and writes
-//  the answer back with "<<" (to any output stream, e.g. cout).
-//
-//  Because execute() takes ANY istream/ostream, the exact same code works
-//  for the terminal (real cin/cout) and the website (cin/cout redirected
-//  to strings in web_main.cpp).
-//
-//  Rules every command follows:
-//   - Errors always start with "Error:" (the website shows them in red).
-//   - Text with spaces goes in "double quotes":  add "Ava Chen" 92
-// =====================================================================
+// CommandShell.h - turns text commands like  grade 1001 "Quiz 3" quiz 88
+// into GradeBook calls. It reads from any istream and writes to any ostream, so
+// the terminal and the website (cin/cout redirected to strings) share this code.
+// Errors always start with "Error:". Text with spaces goes in "quotes".
 #pragma once
 
 #include "GradeBook.h"
 #include <iostream>
 #include <sstream>
-#include <iomanip>   // std::setw, std::setprecision, std::quoted
+#include <iomanip>   // setw, setprecision, quoted
 #include <string>
 #include <vector>
 
 class CommandShell {
 private:
-    // A REFERENCE to the gradebook this shell controls. The "&" means the
-    // shell does not get its own copy; it works on the real gradebook.
-    GradeBook& book;
+    GradeBook& book;   // a reference: the real gradebook, not a copy
 
-    // =================================================================
-    //  SMALL HELPERS
-    // =================================================================
-
-    // Formats a number with a fixed number of decimals: fmt(92.456, 1) -> "92.5"
+    // fmt(92.456, 1) -> "92.5"
     static std::string fmt(double value, int decimals) {
         std::ostringstream out;
         out << std::fixed << std::setprecision(decimals) << value;
@@ -70,8 +48,7 @@ private:
         return true;
     }
 
-    // Reads the next word, OR a whole "quoted phrase", from the arguments.
-    // std::quoted does the hard work: it strips the quotes for us.
+    // Reads one word or a whole "quoted phrase" (std::quoted strips the quotes).
     static bool readText(std::istream& args, std::string& result) {
         result = "";
         args >> std::quoted(result);
@@ -88,8 +65,7 @@ private:
         return readText(args, word) && parseNumber(word, result);
     }
 
-    // Reads EVERYTHING left on the line (quotes are optional).
-    // Used for: rename 1001 Ava Chen   /   classname AP Chemistry
+    // Reads the rest of the line (quotes optional), e.g.  rename 1001 Ava Chen
     static std::string readRest(std::istream& args) {
         std::string rest;
         std::getline(args, rest);
@@ -129,16 +105,14 @@ private:
         return s;
     }
 
-    // A bar of '#' characters for text charts, e.g. bar(3) -> "###"
+    // bar(3) -> "###"
     static std::string bar(int length) {
         std::string result = "";
         for (int i = 0; i < length; i++) result += "#";
         return result;
     }
 
-    // =================================================================
-    //  ONE METHOD PER COMMAND
-    // =================================================================
+    // ----- One method per command -----
 
     // add "<name>" [startingGrade]
     void cmdAdd(std::istream& args, std::ostream& out) {
@@ -613,30 +587,24 @@ private:
     }
 
 public:
-    // Constructor: a reference member MUST be set in this "initializer list"
-    // (the part after the colon), because references can't be reassigned.
+    // A reference member must be set in the initializer list (after the colon).
     CommandShell(GradeBook& gradeBook) : book(gradeBook) {}
 
-    // =================================================================
-    //  execute(): read ONE command from "in", write the answer to "out".
-    //  Returns false when there is nothing more to read or the user typed
-    //  exit/quit/back, so a loop can do:  while (shell.execute(cin, cout))
-    // =================================================================
+    // Runs one command from "in", writing the answer to "out".
+    // Returns false at the end of input or on exit/quit/back.
     bool execute(std::istream& in, std::ostream& out) {
         std::string line;
         if (!std::getline(in, line)) {
-            return false;   // no more input
+            return false;
         }
         if (!line.empty() && line.back() == '\r') line.pop_back();
 
-        std::istringstream args(line);   // treat the rest of the line as its own stream
+        std::istringstream args(line);
         std::string command;
         args >> command;
         command = toLower(command);
 
-        // Tables change the stream's settings (like std::left). Remember the
-        // old settings and put them back afterwards so we don't mess up the
-        // caller's own output.
+        // Tables change the stream's formatting, so restore it afterwards.
         std::ios::fmtflags savedFlags = out.flags();
         bool keepGoing = runCommand(command, args, in, out);
         out.flags(savedFlags);
@@ -644,10 +612,9 @@ public:
     }
 
 private:
-    // Picks the right method for the command word (a big if / else-if chain).
     bool runCommand(const std::string& command, std::istringstream& args,
                     std::istream& in, std::ostream& out) {
-        if (command.empty()) return true;   // blank line: do nothing
+        if (command.empty()) return true;
         else if (command == "add") cmdAdd(args, out);
         else if (command == "grade") cmdGrade(args, out);
         else if (command == "assign") cmdAssign(args, out);
@@ -679,8 +646,7 @@ private:
             book.clearAll();
             out << "Removed all students.\n";
         } else if (command == "resetundo") {
-            // The website sends this right after restoring saved data, so
-            // Ctrl+Z can't "undo" the page load itself.
+            // Sent by the website after restoring saved data, so Ctrl+Z can't undo the page load.
             book.clearUndoHistory();
             out << "Undo history cleared.\n";
         } else if (command == "exit" || command == "quit" || command == "back") {

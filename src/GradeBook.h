@@ -1,47 +1,38 @@
-// =====================================================================
-//  GradeBook.h  -  the WHOLE CLASS (a list of Student objects)
-// ---------------------------------------------------------------------
-//  If a Student is one index card, the GradeBook is the recipe box that
-//  holds all the cards. It can add/remove cards, find a card by ID, sort
-//  the cards, and do math across ALL cards (class average, median, ...).
-//
-//  It also keeps "photocopies" of itself (undo snapshots), so if you make
-//  a mistake you can go back to the last photocopy.
-// =====================================================================
+// GradeBook.h - the whole class: a list of Student objects plus class stats,
+// sorting, curving, undo, and CSV import/export.
 #pragma once
 
 #include "Student.h"
 #include <string>
 #include <vector>
-#include <sstream>    // std::istringstream / std::ostringstream (string streams)
-#include <algorithm>  // std::sort
-#include <cmath>      // std::sqrt
+#include <sstream>
+#include <algorithm>
+#include <cmath>
 
 class GradeBook {
 private:
-    // ----- An undo snapshot = a full copy of everything that can change -----
+    // A full copy of everything that can change, saved before each edit (for undo).
     struct Snapshot {
         std::vector<Student> students;
         int nextId;
         std::string className;
         double passCutoff;
         double needsCutoff;
-        std::string description;   // what the change was, e.g. "add grade"
+        std::string description;   // e.g. "add grade"
     };
 
     std::string className;
-    std::vector<Student> students;   // every Student object in the class
-    int nextId;                      // the ID the next new student will get
-    double passCutoff;               // average needed to "Pass"
-    double needsCutoff;              // average needed for "Needs Improvement"
-    std::vector<Snapshot> undoStack; // newest snapshot is at the back
+    std::vector<Student> students;
+    int nextId;                      // ID for the next new student
+    double passCutoff;
+    double needsCutoff;
+    std::vector<Snapshot> undoStack; // newest at the back
 
-    static const int MAX_UNDO = 50;  // keep at most 50 snapshots
+    static const int MAX_UNDO = 50;
 
-    // Take a "photocopy" of the gradebook BEFORE changing it.
     void saveSnapshot(const std::string& description) {
         Snapshot snap;
-        snap.students = students;    // copying a vector copies every Student
+        snap.students = students;
         snap.nextId = nextId;
         snap.className = className;
         snap.passCutoff = passCutoff;
@@ -49,19 +40,18 @@ private:
         snap.description = description;
         undoStack.push_back(snap);
         if (static_cast<int>(undoStack.size()) > MAX_UNDO) {
-            undoStack.erase(undoStack.begin());   // forget the oldest one
+            undoStack.erase(undoStack.begin());
         }
     }
 
-    // If a change turned out to be invalid, throw away the photocopy we took.
+    // Used when an edit turns out to be invalid.
     void discardLastSnapshot() {
         if (!undoStack.empty()) {
             undoStack.pop_back();
         }
     }
 
-    // The averages of every student who has at least one grade.
-    // (Students with no grades are left out of class statistics.)
+    // Averages of students who have grades (others are left out of class stats).
     std::vector<double> gradedAverages() const {
         std::vector<double> result;
         for (const Student& s : students) {
@@ -72,18 +62,14 @@ private:
         return result;
     }
 
-    // Lowercase copy of a string (for case-insensitive search and sort).
     static std::string toLower(const std::string& text) {
         std::string result = text;
         for (int i = 0; i < static_cast<int>(result.size()); i++) {
-            // The unsigned char cast matters: letters like "e with an accent"
-            // are stored as negative chars, and tolower() crashes on those.
             result[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
         }
         return result;
     }
 
-    // Removes spaces from the start and end of a string.
     static std::string trim(const std::string& text) {
         int start = 0;
         int end = static_cast<int>(text.size()) - 1;
@@ -92,12 +78,11 @@ private:
         return text.substr(start, end - start + 1);
     }
 
-    // Should student a come before student b when sorting by "field"?
+    // Should a come before b when sorting by this field?
     bool comesBefore(const Student& a, const Student& b,
                      const std::string& field, bool descending) const {
         if (field == "average") {
-            // Students with no grades always go to the bottom.
-            if (a.hasGrades() != b.hasGrades()) return a.hasGrades();
+            if (a.hasGrades() != b.hasGrades()) return a.hasGrades();   // no grades go last
             if (descending) return a.average() > b.average();
             return a.average() < b.average();
         }
@@ -105,26 +90,24 @@ private:
             if (descending) return a.getId() > b.getId();
             return a.getId() < b.getId();
         }
-        // default: sort by name, ignoring upper/lower case
         if (descending) return toLower(a.getName()) > toLower(b.getName());
         return toLower(a.getName()) < toLower(b.getName());
     }
 
-    // ---- tiny CSV helpers ----
-    // Wraps a field in quotes if it contains a comma or a quote.
+    // Quotes a CSV field if it contains a comma or quote.
     static std::string csvField(const std::string& text) {
         bool needsQuotes = text.find(',') != std::string::npos ||
                            text.find('"') != std::string::npos;
         if (!needsQuotes) return text;
         std::string result = "\"";
         for (char c : text) {
-            if (c == '"') result += "\"\"";   // a quote inside becomes two quotes
+            if (c == '"') result += "\"\"";
             else result += c;
         }
         return result + "\"";
     }
 
-    // Splits one CSV line into fields, respecting "quoted, fields".
+    // Splits one CSV line into fields, handling "quoted, fields".
     static std::vector<std::string> splitCsvLine(const std::string& line) {
         std::vector<std::string> fields;
         std::string current = "";
@@ -133,7 +116,7 @@ private:
             char c = line[i];
             if (inQuotes) {
                 if (c == '"' && i + 1 < static_cast<int>(line.size()) && line[i + 1] == '"') {
-                    current += '"';   // "" inside quotes means one real quote
+                    current += '"';
                     i++;
                 } else if (c == '"') {
                     inQuotes = false;
@@ -153,22 +136,17 @@ private:
         return fields;
     }
 
-    // Converts text to a number WITHOUT exceptions (std::stoi/stod would
-    // throw on bad input, and our WebAssembly build has exceptions turned
-    // off). A string stream just sets a "fail" flag instead.
+    // Text to number without exceptions (stod would throw; the web build has exceptions off).
     static bool parseNumber(const std::string& text, double& result) {
         std::istringstream stream(text);
         stream >> result;
         if (stream.fail()) return false;
         std::string leftover;
-        stream >> leftover;            // anything after the number? ("88abc")
+        stream >> leftover;            // rejects things like "88abc"
         return leftover.empty();
     }
 
 public:
-    // =================================================================
-    //  CONSTRUCTOR: an empty gradebook with default settings
-    // =================================================================
     GradeBook() {
         className = "My Class";
         nextId = 1001;
@@ -176,9 +154,7 @@ public:
         needsCutoff = 60;
     }
 
-    // =================================================================
-    //  SETTINGS
-    // =================================================================
+    // ----- Settings -----
     std::string getClassName() const { return className; }
     double getPassCutoff() const { return passCutoff; }
     double getNeedsCutoff() const { return needsCutoff; }
@@ -191,7 +167,7 @@ public:
         return true;
     }
 
-    // Cutoffs must make sense: 0 <= needs-improvement < pass <= 100
+    // Must be 0 <= needs-improvement < pass <= 100
     bool setThresholds(double newPass, double newNeeds) {
         if (!(newNeeds >= 0 && newNeeds < newPass && newPass <= 100)) {
             return false;
@@ -202,14 +178,11 @@ public:
         return true;
     }
 
-    // The status of one student using THIS class's cutoffs.
     std::string statusOf(const Student& s) const {
         return s.status(passCutoff, needsCutoff);
     }
 
-    // =================================================================
-    //  ADDING / FINDING / REMOVING STUDENTS
-    // =================================================================
+    // ----- Students -----
     const std::vector<Student>& getStudents() const { return students; }
     int size() const { return static_cast<int>(students.size()); }
 
@@ -218,8 +191,7 @@ public:
         return !cleaned.empty() && cleaned.size() <= 40;
     }
 
-    // Creates a new Student with the parameterized constructor and gives it
-    // the next free ID. Returns the new ID, or -1 if the input was invalid.
+    // Returns the new student's ID, or -1 if the input was invalid.
     int addStudent(const std::string& name, double startingGrade) {
         if (!isValidName(name)) return -1;
         if (startingGrade != Student::NO_GRADE && !Student::isValidScore(startingGrade)) return -1;
@@ -227,36 +199,33 @@ public:
         saveSnapshot("add student");
         int newId = nextId;
         nextId++;
-        Student s(trim(name), newId, startingGrade);   // <-- constructor call
+        Student s(trim(name), newId, startingGrade);   // constructor call
         students.push_back(s);
         return newId;
     }
 
-    // Adds a Student object that was already built somewhere else (main()
-    // builds three by hand). Refuses duplicate IDs.
+    // Adds a Student built elsewhere (main() builds three). Refuses duplicate IDs.
     bool addExistingStudent(const Student& s) {
         if (findById(s.getId()) != nullptr) return false;
         saveSnapshot("add student");
         students.push_back(s);
         if (s.getId() >= nextId) {
-            nextId = s.getId() + 1;   // keep future IDs unique
+            nextId = s.getId() + 1;
         }
         return true;
     }
 
-    // Returns a POINTER to the student with this ID, or nullptr if missing.
-    // A pointer is like a Java object reference: it "points at" the real
-    // Student inside the vector, so changes through it change the original.
+    // Returns a pointer to the real student (like a Java reference), or nullptr.
     Student* findById(int id) {
         for (int i = 0; i < size(); i++) {
             if (students[i].getId() == id) {
-                return &students[i];   // "&" = "the address of"
+                return &students[i];
             }
         }
-        return nullptr;   // C++'s version of Java's null
+        return nullptr;
     }
 
-    // Same thing, but read-only (used inside const methods).
+    // Read-only version for const methods.
     const Student* findById(int id) const {
         for (int i = 0; i < size(); i++) {
             if (students[i].getId() == id) return &students[i];
@@ -279,11 +248,11 @@ public:
         Student* s = findById(id);
         if (s == nullptr || !isValidName(newName)) return false;
         saveSnapshot("rename student");
-        s->setName(trim(newName));   // "->" calls a method through a pointer
+        s->setName(trim(newName));   // -> calls a method through a pointer
         return true;
     }
 
-    // Case-insensitive "contains" search on names. Returns matching IDs.
+    // Case-insensitive name search. Returns matching IDs.
     std::vector<int> search(const std::string& query) const {
         std::vector<int> matches;
         std::string q = toLower(trim(query));
@@ -295,15 +264,13 @@ public:
         return matches;
     }
 
-    // =================================================================
-    //  CHANGING GRADES (each one takes an undo snapshot first)
-    // =================================================================
+    // ----- Grades -----
     bool addGrade(int id, const std::string& label, const std::string& type, double score) {
         Student* s = findById(id);
         if (s == nullptr || trim(label).empty()) return false;
         saveSnapshot("add grade");
         bool ok = s->addGrade(trim(label), type, score);
-        if (!ok) discardLastSnapshot();   // nothing changed, so no undo needed
+        if (!ok) discardLastSnapshot();
         return ok;
     }
 
@@ -327,10 +294,8 @@ public:
         return ok;
     }
 
-    // A CLASS ASSIGNMENT gives one grade to many students at once.
-    // ids[i] gets scores[i]. Everything is checked BEFORE anything changes,
-    // so a single bad score can't leave the class half-graded.
-    // Returns how many students were graded, or -1 if the input was bad.
+    // One grade for many students: ids[i] gets scores[i]. Everything is checked
+    // first so a bad score can't leave the class half-graded. Returns the count, or -1.
     int addAssignment(const std::string& label, const std::string& type,
                       const std::vector<int>& ids, const std::vector<double>& scores) {
         if (trim(label).empty() || Student::normalizeType(type) == "") return -1;
@@ -345,12 +310,9 @@ public:
         return static_cast<int>(ids.size());
     }
 
-    // =================================================================
-    //  CLASS STATISTICS
-    // =================================================================
+    // ----- Class statistics -----
     int gradedCount() const { return static_cast<int>(gradedAverages().size()); }
 
-    // CLASS AVERAGE = (sum of every student's average) / (number of students)
     double classAverage() const {
         std::vector<double> avgs = gradedAverages();
         if (avgs.empty()) return 0;
@@ -359,19 +321,16 @@ public:
         return sum / static_cast<double>(avgs.size());
     }
 
-    // MEDIAN = the middle value after sorting (or the mean of the two
-    // middle values when there is an even count).
     double median() const {
         std::vector<double> avgs = gradedAverages();
         if (avgs.empty()) return 0;
-        std::sort(avgs.begin(), avgs.end());   // C++'s version of Arrays.sort
+        std::sort(avgs.begin(), avgs.end());
         int n = static_cast<int>(avgs.size());
         if (n % 2 == 1) return avgs[n / 2];
         return (avgs[n / 2 - 1] + avgs[n / 2]) / 2.0;
     }
 
-    // STANDARD DEVIATION = how spread out the averages are.
-    // sqrt( average of (each value - mean)^2 )
+    // sqrt( average of (value - mean)^2 )
     double standardDeviation() const {
         std::vector<double> avgs = gradedAverages();
         if (avgs.empty()) return 0;
@@ -383,7 +342,6 @@ public:
         return std::sqrt(sumSquares / static_cast<double>(avgs.size()));
     }
 
-    // PASS RATE = percent of graded students whose status is "Passed".
     double passRate() const {
         int graded = gradedCount();
         if (graded == 0) return 0;
@@ -406,7 +364,6 @@ public:
         return worst;
     }
 
-    // How many graded students have this letter ("A", "B", ...)?
     int countLetter(const std::string& letter) const {
         int count = 0;
         for (const Student& s : students) {
@@ -415,7 +372,6 @@ public:
         return count;
     }
 
-    // How many students have this status ("Passed", "Failed", ...)?
     int countStatus(const std::string& status) const {
         int count = 0;
         for (const Student& s : students) {
@@ -424,7 +380,7 @@ public:
         return count;
     }
 
-    // ID of the student with the highest average (-1 if nobody has grades).
+    // -1 if nobody has grades
     int topStudentId() const {
         int bestId = -1;
         double best = -1;
@@ -437,8 +393,7 @@ public:
         return bestId;
     }
 
-    // ID of the most "at-risk" student: the lowest average, but only if that
-    // student is NOT passing. (If everyone passes, nobody is at risk.)
+    // The lowest average, but only if that student isn't passing.
     int atRiskStudentId() const {
         int worstId = -1;
         double worst = 1000;
@@ -452,21 +407,16 @@ public:
         return worstId;
     }
 
-    // =================================================================
-    //  SORTING: selection sort (the same algorithm from AP CSA!)
-    //  field is "name", "average", or "id".
-    // =================================================================
+    // ----- Sorting (selection sort, like AP CSA). field: name, average, or id -----
     void sortBy(const std::string& field, bool descending) {
         int n = size();
         for (int i = 0; i < n - 1; i++) {
-            // find the student that should come first among i..n-1
             int bestIndex = i;
             for (int j = i + 1; j < n; j++) {
                 if (comesBefore(students[j], students[bestIndex], field, descending)) {
                     bestIndex = j;
                 }
             }
-            // swap it into position i
             if (bestIndex != i) {
                 Student temp = students[i];
                 students[i] = students[bestIndex];
@@ -475,9 +425,7 @@ public:
         }
     }
 
-    // =================================================================
-    //  CURVE: add points to every grade (capped at 100)
-    // =================================================================
+    // ----- Curve -----
     bool applyCurve(double points) {
         if (!(points > 0 && points <= 50) || gradedCount() == 0) return false;
         saveSnapshot("curve");
@@ -487,13 +435,12 @@ public:
         return true;
     }
 
-    // A COPY of this gradebook with the curve applied. The real gradebook is
-    // never touched, so this is perfect for "what if?" previews.
+    // A curved copy for previews; the real gradebook isn't touched.
     GradeBook curvedCopy(double points) const {
-        GradeBook copy;              // a fresh, empty gradebook...
-        copy.students = students;    // ...with copies of our students and settings
-        copy.className = className;  // (but NOT our undo history: that would be
-        copy.passCutoff = passCutoff;   //  50 extra copies of the class for nothing)
+        GradeBook copy;
+        copy.students = students;    // undo history is not copied
+        copy.className = className;
+        copy.passCutoff = passCutoff;
         copy.needsCutoff = needsCutoff;
         for (int i = 0; i < copy.size(); i++) {
             copy.students[i].curveGrades(points);
@@ -501,18 +448,13 @@ public:
         return copy;
     }
 
-    // What WOULD the class average be after a curve?
     double previewCurve(double points) const {
         return curvedCopy(points).classAverage();
     }
 
-    // =================================================================
-    //  UNDO
-    // =================================================================
+    // ----- Undo -----
     bool canUndo() const { return !undoStack.empty(); }
 
-    // Forget every snapshot (used once at startup so "undo" can't remove
-    // the starter students).
     void clearUndoHistory() { undoStack.clear(); }
 
     std::string undoDescription() const {
@@ -533,23 +475,19 @@ public:
         return snap.description;
     }
 
-    // =================================================================
-    //  CLEAR and DEMO DATA
-    // =================================================================
+    // ----- Clear and demo data -----
     void clearAll() {
         saveSnapshot("clear class");
         students.clear();
         nextId = 1001;
     }
 
-    // Replaces the roster with a realistic sample class for demos.
     void loadDemo() {
         saveSnapshot("load demo");
         students.clear();
         nextId = 1001;
         className = "Period 3 - Chemistry";
 
-        // The same 7 assignments for everyone (label + type).
         const int NUM_ASSIGNMENTS = 7;
         std::string labels[NUM_ASSIGNMENTS] = {
             "Homework 1", "Quiz 1: Atoms", "Unit 1 Test", "Lab Project",
@@ -557,20 +495,19 @@ public:
         std::string types[NUM_ASSIGNMENTS] = {
             "Homework", "Quiz", "Test", "Project", "Quiz", "Homework", "Test"};
 
-        // One row of scores per student (a 2D array, like int[][] in Java).
         const int NUM_STUDENTS = 8;
         std::string names[NUM_STUDENTS] = {
             "Ava Chen", "Marcus Johnson", "Priya Patel", "Diego Ramirez",
             "Sofia Rossi", "Ethan Brooks", "Hana Kim", "Liam O'Connor"};
-        double scores[NUM_STUDENTS][NUM_ASSIGNMENTS] = {
-            {95, 92, 94, 98, 96, 100, 97},   // Ava: consistent top student
-            {78, 72, 70, 80, 75, 85, 74},    // Marcus: solid C
-            {88, 85, 90, 92, 89, 95, 91},    // Priya: strong
-            {60, 55, 58, 65, 62, 70, 66},    // Diego: on the edge
-            {82, 79, 84, 88, 86, 90, 85},    // Sofia: steady B
-            {50, 48, 52, 60, 45, 65, 49},    // Ethan: struggling
-            {70, 74, 76, 80, 82, 88, 85},    // Hana: improving every week
-            {92, 85, 80, 78, 75, 70, 68}};   // Liam: sliding downward
+        double scores[NUM_STUDENTS][NUM_ASSIGNMENTS] = {   // 2D array, like double[][] in Java
+            {95, 92, 94, 98, 96, 100, 97},
+            {78, 72, 70, 80, 75, 85, 74},
+            {88, 85, 90, 92, 89, 95, 91},
+            {60, 55, 58, 65, 62, 70, 66},
+            {82, 79, 84, 88, 86, 90, 85},
+            {50, 48, 52, 60, 45, 65, 49},
+            {70, 74, 76, 80, 82, 88, 85},
+            {92, 85, 80, 78, 75, 70, 68}};
 
         for (int s = 0; s < NUM_STUDENTS; s++) {
             Student student(names[s], nextId, Student::NO_GRADE);
@@ -582,13 +519,7 @@ public:
         }
     }
 
-    // =================================================================
-    //  CSV EXPORT / IMPORT
-    //  Format (one row per grade; a student with no grades gets one row
-    //  with the last three columns empty):
-    //      id,name,assignment,type,score
-    //      1001,Ava Chen,Unit 1 Test,Test,94
-    // =================================================================
+    // ----- CSV: one row per grade -> id,name,assignment,type,score -----
     std::string exportCsv() const {
         std::ostringstream out;
         out << "id,name,assignment,type,score\n";
@@ -604,9 +535,8 @@ public:
         return out.str();
     }
 
-    // Replaces the roster with the students in the CSV text.
-    // The three "int&" parameters are extra answers sent back to the caller.
-    // Returns false (and changes nothing) if no valid rows were found.
+    // Replaces the roster with the CSV's students. The int& parameters send counts
+    // back to the caller. Returns false (and changes nothing) if no rows were valid.
     bool importCsv(const std::string& text, int& studentsLoaded, int& gradesLoaded,
                    int& rowsSkipped) {
         studentsLoaded = 0;
@@ -619,7 +549,7 @@ public:
         std::string line;
 
         while (std::getline(lines, line)) {
-            if (!line.empty() && line.back() == '\r') line.pop_back();   // Windows line endings
+            if (!line.empty() && line.back() == '\r') line.pop_back();
             if (trim(line).empty()) continue;
 
             std::vector<std::string> f = splitCsvLine(line);
@@ -633,7 +563,6 @@ public:
             }
             int id = static_cast<int>(idNumber);
 
-            // Find this student in what we've loaded so far, or create them.
             int index = -1;
             for (int i = 0; i < static_cast<int>(loaded.size()); i++) {
                 if (loaded[i].getId() == id) index = i;
