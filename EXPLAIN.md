@@ -1,0 +1,257 @@
+# How Gradebook++ Works (in plain English)
+
+This guide walks through every C++ file, then follows **one button click** all the way from the website into C++ and back. Analogies first, code second.
+
+---
+
+## The big picture: a restaurant
+
+Imagine the whole program is a small restaurant.
+
+| Restaurant | Our program | File |
+|---|---|---|
+| A **recipe card** for one dish, with its own notes on the back | One `Student` object: name, ID, list of grades, and math about itself | `src/Student.h` |
+| The **recipe box** holding every card, plus photocopies in case you spill coffee | The `GradeBook`: every student, class-wide stats, undo snapshots | `src/GradeBook.h` |
+| The **waiter**, who reads your order and brings back the answer | The `CommandShell`: reads a text command with `>>`, answers with `<<` | `src/CommandShell.h` |
+| The **drive-through window** | `run()`: JavaScript passes text in, C++ hands text out | `src/web_main.cpp` |
+| The **dining room** with a paper menu | The terminal version with a `cin`/`cout` menu | `src/main.cpp` |
+| The **fancy front-of-house** with screens and buttons | The website | `web/` |
+
+The website is **only decoration**. It doesn't know what a weighted average is. It knows how to *ask C++*, and how to draw what C++ answers.
+
+---
+
+## `src/Student.h`: one recipe card
+
+A `Student` is like one index card. The front has the **name** and **ID**, and the back has a **list of grades**. These three things are `private`: only the card's own methods can change them. It's the same idea as private fields in Java, so nobody can write "-50" on the card by accident.
+
+```cpp
+class Student {
+private:
+    std::string name;
+    int id;
+    std::vector<GradeEntry> grades;   // like ArrayList<GradeEntry>
+```
+
+**The constructor** ([Student.h:49](src/Student.h#L49)) runs automatically when you write `Student s("Ava Chen", 1001, 92);`. It fills in the card:
+
+```cpp
+Student(const std::string& name, int id, double startingGrade) {
+    this->name = name;     // exactly like Java
+    this->id = id;
+    if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
+        grades.push_back({"Starting Grade", "Quiz", startingGrade});
+    }
+}
+```
+
+**The weighted average** ([Student.h:181](src/Student.h#L181)). Think of it as a seesaw where heavier kids count more. A Test is a heavy kid (×2), a Quiz is normal (×1), and Homework is light (×0.5):
+
+> average = (score₁ × weight₁ + score₂ × weight₂ + …) ÷ (weight₁ + weight₂ + …)
+>
+> Example: Test 80 (×2) and Quiz 100 (×1) → (160 + 100) ÷ 3 = **86.7**
+
+**The status decision** ([Student.h:235](src/Student.h#L235)) is a plain if / else-if / else chain, like a bouncer checking heights at a ride:
+
+```cpp
+if (avg >= passCutoff)                  return "Passed";
+else if (avg >= needsImprovementCutoff) return "Needs Improvement";
+else                                    return "Failed";
+```
+
+The cutoffs are *parameters*, so the teacher can move them (Settings on the website, or `thresholds 80 70`).
+
+**"What do I need?"** ([Student.h:275](src/Student.h#L275)) is algebra. We want the new average to equal the target, and we solve for the unknown score `x`:
+
+> (current weighted sum + w·x) ÷ (current total weight + w) = target
+> → x = (target × (total weight + w) − weighted sum) ÷ w
+
+If `x` comes out above 100, it's impossible. If it's 0 or less, the student is already safe.
+
+**Other methods:** `letterGrade()` (90/80/70/60), `gpa()`, `trend()` (is the newest grade above or below their earlier average?), `highestScore()`, `lowestScore()`.
+
+---
+
+## `src/GradeBook.h`: the recipe box
+
+A `GradeBook` holds a `std::vector<Student>`, which is a growable list of Student objects (Java: `ArrayList<Student>`). It does everything that needs *more than one* student:
+
+- **Class average, median, standard deviation, pass rate** ([GradeBook.h:354](src/GradeBook.h#L354) and below). The median sorts the averages and picks the middle one. The standard deviation measures "how spread out are the averages?"
+- **Finding a student:** `findById()` ([GradeBook.h:250](src/GradeBook.h#L250)) returns a **pointer** (`Student*`). A pointer is like a Java object reference: it *points at* the real card in the box, so changing it through the pointer changes the original. If nobody has that ID, it returns `nullptr` (C++'s `null`).
+- **Sorting:** `sortBy()` ([GradeBook.h:459](src/GradeBook.h#L459)) is a **selection sort**, the same algorithm from AP CSA Unit 7. Find the student who should come first, swap them to the front, repeat.
+- **Undo:** before *every* change, `saveSnapshot()` ([GradeBook.h:42](src/GradeBook.h#L42)) makes a **photocopy** of the whole box (copying a vector copies every Student inside it). `undo()` ([GradeBook.h:524](src/GradeBook.h#L524)) throws away the current box and puts the newest photocopy back. We keep the last 50 photocopies.
+- **Curve preview:** `curvedCopy()` ([GradeBook.h:492](src/GradeBook.h#L492)) photocopies the class, curves the *copy*, and lets you look at the copy's average. The real class is never touched. That's how the slider shows "77.0 → 81.9" before you press Apply.
+- **CSV import/export** ([GradeBook.h:592](src/GradeBook.h#L592)). Export writes one line per grade (`1001,Ava Chen,Unit 1 Test,Test,94`). Import reads them back, handling `"quoted, names"` with commas in them.
+
+**Why no `stoi` / `stod`?** Our WebAssembly build has exceptions switched off, to keep the file small. `std::stoi("abc")` would *throw*, and with no exceptions the program would just crash. So we convert text to numbers with a string stream, which only raises a "fail" flag:
+
+```cpp
+std::istringstream stream(text);
+stream >> result;
+if (stream.fail()) return false;   // "abc" lands here: no crash
+```
+
+---
+
+## `src/CommandShell.h`: the waiter
+
+The waiter takes an order written as text, like
+
+```
+grade 1001 "Unit 3 Quiz" quiz 88
+```
+
+and works out what to do. The key method is `execute(istream& in, ostream& out)` ([CommandShell.h:625](src/CommandShell.h#L625)):
+
+1. `getline(in, line)` reads one whole line (one order).
+2. `args >> command` reads the first word (`grade`).
+3. A big if / else-if chain ([CommandShell.h:648](src/CommandShell.h#L648)) picks the matching method, `cmdGrade()`.
+4. `cmdGrade()` ([CommandShell.h:169](src/CommandShell.h#L169)) reads the rest with `>>`: the ID, the label, the type, and the score.
+5. It asks the GradeBook to do the work, then writes a reply with `out << "Added Quiz ..."`.
+
+The clever part: `execute()` takes **any** input stream and **any** output stream. In the terminal those are the real `cin` and `cout`. On the website they're `cin` and `cout` *redirected to strings*. Same waiter, same code, two different restaurants.
+
+**Quoted text:** names have spaces, so `"Ava Chen"` goes in quotes. `std::quoted` ([CommandShell.h:75](src/CommandShell.h#L75)) reads a quoted phrase as one piece and strips off the quotes.
+
+**Errors always start with `Error:`**, which is how the website knows to show a red toast instead of a green one.
+
+**The `json` command** ([CommandShell.h:537](src/CommandShell.h#L537)) loops over every student and writes the whole class as JSON. JSON is a text format JavaScript can read instantly. After every change, the website asks for `json` and redraws everything from it.
+
+---
+
+## `src/web_main.cpp`: the drive-through window
+
+The website can't call C++ classes directly. It can only call plain functions that the WebAssembly file *exports*. So we export exactly one important function, `run()` ([web_main.cpp:57](src/web_main.cpp#L57)):
+
+```cpp
+const char* run(const char* line) {
+    std::istringstream input(line);    // the order, as a stream
+    std::ostringstream output;         // an empty bag for the answer
+
+    std::streambuf* oldCin  = std::cin.rdbuf(input.rdbuf());    // cin now reads the order
+    std::streambuf* oldCout = std::cout.rdbuf(output.rdbuf());  // cout now fills the bag
+
+    shell.execute(std::cin, std::cout);   // the waiter does the real work
+
+    std::cin.rdbuf(oldCin);               // put the real cin/cout back
+    std::cout.rdbuf(oldCout);
+    std::cin.clear();                     // forget "end of input" for next time
+    result = output.str();
+    return result.c_str();               // hand the bag out the window
+}
+```
+
+**Analogy:** `rdbuf()` is like swapping the pipe a faucet is connected to. `cin` is still `cin` and `cout` is still `cout`, but for a moment `cin`'s pipe comes from our string and `cout`'s pipe drains into our bag.
+
+That's why we can honestly say: **every button on the website sends a command that C++ reads with `cin` and answers with `cout`.**
+
+`alloc()` and `dealloc()` exist because JavaScript can't create C++ strings. JS asks C++ for a chunk of memory, copies the command's bytes into it, and gives it back afterwards.
+
+---
+
+## `src/main.cpp`: the terminal version
+
+This is the OnlineGDB backup, built from the **same three classes**.
+
+- **On startup** ([main.cpp:514](src/main.cpp#L514)) it builds three Student objects with the constructor, prints each one with its status, and calculates their class average. That covers the rubric in the first 20 lines of output.
+- **Then a menu loop** asks for a number 0–12 and calls one function per option.
+- **Safe input** ([main.cpp:112](src/main.cpp#L112)). If you type `abc` where a number is expected, `cin` jams (it enters a "fail" state) and ignores everything after. The fix is three steps:
+  1. `cin.fail()`: did that go wrong?
+  2. `cin.clear()`: un-jam it.
+  3. `cin.ignore(...)`: throw away the rest of the bad line.
+- **Command mode** (option 12, [main.cpp:475](src/main.cpp#L475)) lets you type the exact same commands the website sends, using the same `CommandShell`.
+- **Colors** use ANSI codes like `\033[32m` (green). Set `FANCY_UI = false` to turn them off.
+
+---
+
+## Following one click, start to finish
+
+You open Ethan's panel, type **"Unit 3 Retest"**, choose **Test**, enter **95**, and click **Add**.
+
+```
+ YOU click "Add"
+   │
+   ▼
+ 1. app.js builds a text command                        web/app.js  (add-grade form)
+      grade 1006 "Unit 3 Retest" test 95
+   │
+   ▼
+ 2. cpp() logs it to the console panel, calls engine.run()      web/app.js:78
+   │
+   ▼
+ 3. engine.js copies the text into WebAssembly memory           web/engine.js:110
+      ptr = alloc(n)  →  copy bytes  →  run(ptr)
+   │
+   ═════════════════  now we're inside C++  ═════════════════
+   ▼
+ 4. run() points cin at the text, cout at an empty string       src/web_main.cpp:57
+   │
+   ▼
+ 5. CommandShell::execute(cin, cout)                            src/CommandShell.h:625
+      getline(cin, line)   →  "grade 1006 "Unit 3 Retest" test 95"
+      args >> command      →  "grade"   →  cmdGrade()
+      readInt → 1006, std::quoted → Unit 3 Retest, "test", 95
+   │
+   ▼
+ 6. GradeBook::addGrade(1006, ...)                              src/GradeBook.h:301
+      findById(1006) → pointer to Ethan's Student object
+      saveSnapshot("add grade")   ← photocopy for Undo
+   │
+   ▼
+ 7. Student::addGrade(...)                                      src/Student.h
+      normalizeType("test") → "Test";  isValidScore(95) → true
+      grades.push_back(...)
+   │
+   ▼
+ 8. cout << "Added Test "Unit 3 Retest" (95.0) for Ethan Brooks. New average: 60.2%."
+   │
+   ═════════════════  back out to JavaScript  ═════════════════
+   ▼
+ 9. run() returns the bag; engine.js reads bytes until the 0 at the end
+   │
+   ▼
+10. app.js shows that exact text in a green toast (with an Undo button)
+   │
+   ▼
+11. app.js sends "json"; C++ loops over every student and prints the class as JSON
+   │
+   ▼
+12. JSON.parse → redraw the tiles, charts, roster, and Ethan's panel
+```
+
+Every step from 4 to 8 is C++. JavaScript never calculates a grade.
+
+**Want to see it live?** Open the **C++ Console** at the bottom of the page. Every command from steps 1 and 11 appears there, along with C++'s exact output.
+
+---
+
+## WebAssembly in one paragraph
+
+**WebAssembly (`.wasm`)** is a compact program format that every modern browser can run almost as fast as a normal app. We compile our C++ into it with `zig c++ -target wasm32-wasi`. **WASI** is a standard list of "operating system" services a program might need, like "print this text" (`fd_write`) or "quit" (`proc_exit`). A browser isn't an operating system, so `web/engine.js` provides tiny stand-ins for the 8 services our program asks for. Think of it as a **travel adapter**: the plug (our C++) expects a certain socket, so we hand it one that fits.
+
+One last step: before using `run()`, JavaScript calls **`_initialize()`** ([engine.js:107](web/engine.js#L107)). That's like turning on the lights before opening the shop. It runs the C++ setup code that builds `cout` itself and our global `GradeBook` and `CommandShell`.
+
+---
+
+## Java → C++ cheat sheet
+
+| Java | C++ (in this project) | Notes |
+|---|---|---|
+| `String` | `std::string` | `std::` is like a package prefix (`java.util.`) |
+| `ArrayList<Student>` | `std::vector<Student>` | `push_back()` = `add()`, `size()` = `size()` |
+| `null` | `nullptr` | |
+| object reference | pointer `Student*` | use `->` to call a method: `s->getName()` |
+| (no equivalent) | reference `double&` | lets a function write into the caller's variable |
+| (no direct equivalent) | `const` after the `()` | a promise the method won't change the object: `double average() const` |
+| `public static final int` | `static const int` | `Student::NO_GRADE` |
+| `System.out.println(x)` | `std::cout << x << "\n";` | |
+| `Scanner.nextInt()` | `std::cin >> x;` | check `cin.fail()` afterwards |
+| one class per `.java` file | class in a `.h` "header", `#include`d where needed | `#pragma once` stops double-including |
+| `import` | `#include` | |
+| `try { } catch` | (turned off in our web build) | we check return values instead |
+
+---
+
+## The 30-second version (for the video)
+
+> "Our grade tracker has three C++ classes. `Student` is one student with private grades and methods like `average()` and `status()`. `GradeBook` holds all the students and does class-wide math, sorting, and undo. `CommandShell` reads text commands with `cin` and answers with `cout`. We compiled that C++ to WebAssembly so it runs in the browser. When you click a button, JavaScript sends a command like `grade 1001 quiz 88` into a C++ function called `run()`. `run()` points `cin` at that text, C++ reads it, updates the objects, and writes the answer with `cout`. The website just draws whatever C++ said."

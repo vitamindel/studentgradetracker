@@ -1,0 +1,23 @@
+# Local build output (the console .exe, test screenshots, temp files)
+build/
+*.exe
+*.o
+*.out
+
+# Test dependencies (reinstall with: cd tests && npm install)
+node_modules/
+
+# Zig / editor / OS clutter
+.zig-cache/
+zig-cache/
+zig-out/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Vercel CLI
+.vercel
+
+# NOTE: web/gradebook.wasm is NOT ignored on purpose. It is committed so
+# Vercel can serve the site without compiling any C++.

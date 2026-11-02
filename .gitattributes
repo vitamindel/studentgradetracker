@@ -1,0 +1,4 @@
+# The compiled C++ must never be touched by line-ending conversion.
+*.wasm binary
+# Shell scripts need Unix line endings to run on Mac/Linux.
+*.sh text eol=lf

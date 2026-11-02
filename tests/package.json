@@ -1,0 +1,14 @@
+{
+  "name": "gradebook-tests",
+  "private": true,
+  "type": "module",
+  "description": "Tests for the Student Grade Tracker (engine + browser UI).",
+  "scripts": {
+    "engine": "node engine_test.mjs",
+    "ui": "node ui_test.mjs",
+    "test": "node engine_test.mjs && node ui_test.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.49.1"
+  }
+}
