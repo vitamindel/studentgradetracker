@@ -28,7 +28,7 @@ public:
         this->id = id;
 
         // The starting grade is recorded as a Quiz.
-        if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
+        if (startingGrade != NO_GRADE && isValidStartingGrade(startingGrade)) {
             grades.push_back({"Starting Grade", "Quiz", startingGrade});
         }
     }
@@ -63,9 +63,9 @@ public:
         return 0;
     }
 
-    static bool isValidScore(double score) {
-        return score >= 0 && score <= 120;
-    }
+    // Scores can go up to 120 (extra credit), but a starting grade can't.
+    static bool isValidScore(double score) { return score >= 0 && score <= 120; }
+    static bool isValidStartingGrade(double grade) { return grade >= 0 && grade <= 100; }
 
     // Getters and setters
     std::string getName() const { return name; }

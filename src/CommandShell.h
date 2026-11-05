@@ -127,8 +127,8 @@ private:
         double starting = Student::NO_GRADE;
         std::string gradeWord;
         if (readText(args, gradeWord)) {
-            if (!parseNumber(gradeWord, starting) || !Student::isValidScore(starting)) {
-                out << "Error: the starting grade must be a number from 0 to 120.\n";
+            if (!parseNumber(gradeWord, starting) || !Student::isValidStartingGrade(starting)) {
+                out << "Error: the starting grade must be a number from 0 to 100.\n";
                 return;
             }
         }

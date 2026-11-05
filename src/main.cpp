@@ -225,7 +225,7 @@ void addStudentMenu(GradeBook& book) {
         cout << paint("  Names must be 1-40 characters.\n", RED);
         return;
     }
-    double grade = readDouble("  Starting grade (0-120): ", 0, 120);
+    double grade = readDouble("  Starting grade (0-100): ", 0, 100);
     int id = book.addStudent(name, grade);
     cout << paint("  Added " + name + " with ID " + to_string(id) + ".\n", GREEN);
 }

@@ -41,6 +41,10 @@ for (const channel of ["chrome", "msedge"]) {
 if (!browser) throw new Error("Could not find Chrome or Edge to run the UI test.");
 
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+// This test covers the no-login version; tests/cloud_test.mjs covers login + the database.
+await context.route("**/firebase-config.js", (route) => route.fulfill({
+  contentType: "text/javascript", body: 'export const firebaseConfig = { apiKey: "" };',
+}));
 const page = await context.newPage();
 
 const problems = [];
@@ -99,6 +103,10 @@ await page.screenshot({ path: SHOTS + "01-desktop-light.png", fullPage: true });
 const trickyName = `<b>Zoe</b> "Z" O'Neil`;
 await page.click("#add-student-btn");
 await page.fill("#new-name", trickyName);
+await page.fill("#new-grade", "105");
+await page.click('#form-student button[value="ok"]');
+check("add student: starting grade over 100 is blocked",
+  (await page.locator("#dlg-student").evaluate((d) => d.open)) && (await rows()) === 8);
 await page.fill("#new-grade", "88");
 await page.click('#form-student button[value="ok"]');
 await settle();

@@ -194,7 +194,7 @@ public:
     // Returns the new student's ID, or -1 if the input was invalid.
     int addStudent(const std::string& name, double startingGrade) {
         if (!isValidName(name)) return -1;
-        if (startingGrade != Student::NO_GRADE && !Student::isValidScore(startingGrade)) return -1;
+        if (startingGrade != Student::NO_GRADE && !Student::isValidStartingGrade(startingGrade)) return -1;
 
         saveSnapshot("add student");
         int newId = nextId;

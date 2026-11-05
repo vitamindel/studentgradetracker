@@ -39,11 +39,13 @@ private:
 Student(const std::string& name, int id, double startingGrade) {
     this->name = name;     // exactly like Java
     this->id = id;
-    if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
+    if (startingGrade != NO_GRADE && isValidStartingGrade(startingGrade)) {
         grades.push_back({"Starting Grade", "Quiz", startingGrade});
     }
 }
 ```
+
+The starting grade has to be from 0 to 100. Later grades can go up to 120 for extra credit, but a student can't start the class above 100%.
 
 **The weighted average** ([Student.h:149](src/Student.h#L149)) works the same way as our school's grade portal. First, each **category** gets its own average. Then those averages are combined by weight: **Project 50%, Test 20%, and Homework, Quiz, and Class Activity 10% each.** Think of a pizza cut into slices of different sizes. The Project is half the pizza, so it matters most. If a category has no grades yet, its slice is left out and the other slices are stretched to fill the whole pizza:
 
@@ -235,6 +237,37 @@ Every step from 4 to 8 is C++. JavaScript never calculates a grade.
 **WebAssembly (`.wasm`)** is a compact program format that every modern browser can run almost as fast as a normal app. We compile our C++ into it with `zig c++ -target wasm32-wasi`. **WASI** is a standard list of "operating system" services a program might need, like "print this text" (`fd_write`) or "quit" (`proc_exit`). A browser isn't an operating system, so `web/engine.js` provides tiny stand-ins for the 8 services our program asks for. Think of it as a **travel adapter**: the plug (our C++) expects a certain socket, so we hand it one that fits.
 
 One last step: before using `run()`, JavaScript calls **`_initialize()`** ([engine.js:94](web/engine.js#L94)). That's like turning on the lights before opening the shop. It runs the C++ setup code that builds `cout` itself and our global `GradeBook` and `CommandShell`.
+
+---
+
+## Accounts and the cloud database (Firebase)
+
+This part is JavaScript plus Google's Firebase, not C++. C++ still does **every** calculation, even on a student's page. Firebase only stores and moves the data.
+
+**The database ([web/cloud.js](web/cloud.js)).** Cloud Firestore stores **documents**, like little JSON objects, inside **collections**, like folders. Think of it as a giant `HashMap<String, Document>` that lives on Google's servers. A document's "key" is its path:
+
+| Path | What's in it |
+|---|---|
+| `accounts/{uid}` | Is this person a `"teacher"` or a `"student"`? A student's account also says which student record is theirs. |
+| `users/{teacherUid}` | A teacher's class name and pass cutoffs |
+| `users/{teacherUid}/students/1001` | One student: name, grades, and the average/letter/status C++ worked out, plus their `joinCode` |
+| `joinCodes/K7P2QX9M` | Which teacher and student this code belongs to |
+
+(`uid` is the ID Firebase gives each login, a long random string.)
+
+**Saving.** After every change, the page takes C++'s `json` answer and writes only the students that changed, all in one **batch**. A batch is all-or-nothing, like a bank transfer: either every write happens or none do. **Loading** goes the other way: the documents are turned back into CSV text and handed to C++'s own `import` command, so C++ rebuilds its `Student` objects exactly like it does for a CSV file.
+
+**Logging in.** Firebase Authentication checks the email and password (or the Google account) and tells the page who you are. We never see or store passwords.
+
+**Teacher vs. student.** Each student gets a random 8-character code (like a locker combination). The teacher hands it out. A student who signs up with it gets an account tied to that one student record. Their page loads just their own document into C++ and shows the student panel full-screen, without any buttons that change grades. Firestore's `onSnapshot` watches that one document, so a new grade from the teacher appears on the student's screen within a second.
+
+**The security rules ([firestore.rules](firestore.rules)).** Hiding buttons isn't security: anyone can open the browser's developer tools and run their own code. So the real rules live on **Google's servers**, and they're checked on every single read and write. It's like `private` in Java, except a hacker can't just edit the class:
+
+- A teacher can read and write only `users/<their own uid>`.
+- A student can **read** (never write) only the one student document whose path matches their account **and** whose `joinCode` still matches their code. If the teacher removes them, the code is deleted and access stops. Loading the demo, clearing, or importing a CSV starts IDs over at 1001, so those give **everyone** new codes. Otherwise a new student 1002 could inherit the old student 1002's code.
+- Making a student account requires a real code. You can't just claim to be student 1003.
+
+Our cloud test proves this by trying the attacks for real against Firebase's emulator: a student asking for another student's record, listing the whole class, changing their own grade, or re-pointing their account at someone else. Every one gets `403 Forbidden`.
 
 ---
 

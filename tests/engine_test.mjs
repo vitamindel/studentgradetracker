@@ -64,6 +64,11 @@ check("score 'abc' is rejected", run('grade 1001 "Quiz 9" quiz abc').startsWith(
 check("unknown student is rejected", run('grade 4242 "Quiz 9" quiz 90').startsWith("Error"));
 check("unknown command is rejected", run("dance").startsWith("Error: unknown command"));
 check("empty name is rejected", run('add "" 90').startsWith("Error"));
+out = run('add "Too High" 105');
+check("starting grade over 100 is rejected", out.startsWith("Error: the starting grade must be a number from 0 to 100"), out.trim());
+out = run('add "Perfect Start" 100');
+check("starting grade of exactly 100 is allowed", out.includes("with a starting grade of 100.0"), out.trim());
+run("undo");
 
 // ---- grade / edit / delete ----
 out = run('grade 1004 "Unit 3 Test" test 90');

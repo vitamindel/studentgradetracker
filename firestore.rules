@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// Who can read and write what. The website can't get around these: Firebase checks them on its servers.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+    function myAccount() { return get(/databases/$(database)/documents/accounts/$(request.auth.uid)).data; }
+
+    // A student account must point at the same teacher + student as a real join code.
+    function validStudent(acct) {
+      let link = get(/databases/$(database)/documents/joinCodes/$(acct.code));
+      return link != null && link.data.teacherUid == acct.teacherUid && link.data.studentId == acct.studentId;
+    }
+
+    // Each person's role. Anyone can be a teacher (they only ever see their own class).
+    match /accounts/{uid} {
+      allow get: if isMe(uid);
+      allow create, update: if isMe(uid) &&
+        (request.resource.data.role == "teacher" ||
+         (request.resource.data.role == "student" && validStudent(request.resource.data)));
+    }
+
+    // Codes are random, so knowing one is the proof. Only the teacher who made a code can change it.
+    match /joinCodes/{code} {
+      allow get: if true;
+      allow create: if signedIn() && request.resource.data.teacherUid == request.auth.uid;
+      allow update: if signedIn() && resource.data.teacherUid == request.auth.uid
+                    && request.resource.data.teacherUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.teacherUid == request.auth.uid;
+    }
+
+    // A teacher's class. The teacher can do everything; a linked student can read the class name.
+    match /users/{teacherUid} {
+      allow read, write: if isMe(teacherUid);
+      allow get: if signedIn() && myAccount().role == "student" && myAccount().teacherUid == teacherUid;
+
+      // One student. Their own student account can read it (only it, and only while the code matches).
+      match /students/{studentId} {
+        allow read, write: if isMe(teacherUid);
+        allow get: if signedIn() && myAccount().role == "student"
+                   && myAccount().teacherUid == teacherUid
+                   && myAccount().studentId == studentId
+                   && resource.data.joinCode == myAccount().code;
+      }
+    }
+  }
+}

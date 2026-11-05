@@ -24,14 +24,19 @@ web/
   index.html  style.css  app.js     the website (plain JS, no framework)
   engine.js                         loads gradebook.wasm and provides the tiny WASI "shim"
   gradebook.wasm                    the compiled C++ (committed, so Vercel needs no build)
+  cloud.js                          login + cloud database (Firebase Authentication + Cloud Firestore)
+  firebase-config.js                your Firebase project's settings (blank = no login, saves in the browser)
 onlinegdb/GradeTracker_SingleFile.cpp   all headers + main.cpp in one file (generated)
 tests/
   console_input.txt   scripted input for the terminal version
-  engine_test.mjs     60 checks that run the real .wasm in Node
-  ui_test.mjs         67 checks that click through the website in headless Chrome
+  engine_test.mjs     62 checks that run the real .wasm in Node
+  ui_test.mjs         68 checks that click through the website in headless Chrome
+  cloud_test.mjs      71 checks of login, teacher/student accounts, and the database rules (Firebase emulators)
 tools/make_single_file.py   builds the OnlineGDB file
 build.sh / build.ps1        rebuild everything
 vercel.json                 tells Vercel to serve the web/ folder
+firestore.rules             who can read/write what in the database (checked by Google's servers)
+firebase.json               points Firebase at firestore.rules (and sets up the test emulators)
 ```
 
 ---
@@ -59,9 +64,31 @@ You need a free GitHub account and Git installed (`git --version` to check).
 4. Click **Deploy**. After about 20 seconds you get a link like `https://gradebook-plus-plus.vercel.app`. That's the link to open at school.
 5. Every `git push` after this redeploys automatically.
 
-> **School Chromebook tip:** the site works offline after it loads, and your class is saved in that browser (localStorage). A different computer starts fresh with the demo class. To move your data between computers, use **⋯ → Export CSV**, then **⋯ → Import CSV** on the other one.
+> **Without login** (until you do step 3), your class is saved in that browser only. To move it between computers, use **⋯ → Export CSV**, then **⋯ → Import CSV** on the other one.
 
-## 3. Run it on your own computer
+## 3. Turn on login and the cloud database (Firebase)
+
+This adds **teacher and student accounts** and saves every class in **Cloud Firestore**, Google's cloud database. It's free (the Spark plan, no credit card) and takes about 10 minutes.
+
+1. Go to <https://console.firebase.google.com>, click **Create a project**, and name it `gradebook-plus-plus`. You can turn Google Analytics off.
+2. On the project's home page, click the **Web** icon (`</>`), give the app a nickname, and click **Register app**. Firebase shows a block of code with `const firebaseConfig = { apiKey: ..., ... }`. Copy those six values into [web/firebase-config.js](web/firebase-config.js).
+3. In the left menu, open **Authentication** → **Get started** → **Sign-in method**. Turn on **Email/Password**, then **Google** (pick your email as the support email).
+4. Still in Authentication, open **Settings** → **Authorized domains** → **Add domain**, and add your Vercel address (like `gradebook-plus-plus.vercel.app`). `localhost` is already there.
+5. In the left menu, open **Firestore Database** → **Create database**. Pick a location near you and start in **production mode**.
+6. Open the **Rules** tab, delete what's there, paste in everything from [firestore.rules](firestore.rules), and click **Publish**.
+7. Commit and push. Vercel redeploys, and the site now opens on a sign-in screen.
+
+> The `apiKey` in `firebase-config.js` is **meant to be public**. Every Firebase website ships it to the browser. What protects the data is `firestore.rules`. If GitHub emails you about a "Google API key" in the repo, that's why it's safe to leave.
+
+**How the accounts work**
+
+- **Teacher:** click **Create an account**, pick **Teacher**. You get the full gradebook (a new account starts with the demo class), and it's saved to the database after every change. Sign in on any computer and it's there.
+- **Student:** the teacher opens **⋯ → Student login codes** (or a student's panel) and gives each student their code, like `K7P2-QX9M`. The student clicks **Create an account**, picks **Student**, and types the code. They see **only their own** report card: average, categories, grade history, and the "What do I need?" calculator. They can't change anything, and it updates by itself when the teacher adds a grade.
+- **Use without an account** still works, saving in that browser like before.
+
+The rule that a student can only read their own record is enforced by **Google's servers** (`firestore.rules`), not just by hiding buttons. So even someone who edits the page's JavaScript can't read another student's grades. Removing a student deletes their code, so they lose access too. **Load demo class**, **Clear all students**, and **Import CSV** start a new roster, so every student gets a new code and the old ones stop working.
+
+## 4. Run it on your own computer
 
 The page must be opened through a web server, because browsers block WebAssembly on `file://` pages:
 
@@ -71,7 +98,7 @@ python -m http.server 8000 -d web
 
 Then open <http://localhost:8000>.
 
-## 4. Run the terminal version (OnlineGDB backup)
+## 5. Run the terminal version (OnlineGDB backup)
 
 1. Open <https://www.onlinegdb.com>, set the language (top right) to **C++17**.
 2. Paste the whole of `onlinegdb/GradeTracker_SingleFile.cpp` into `main.cpp` and press **Run**.
@@ -84,7 +111,7 @@ g++ -std=c++17 -Wall -Wextra -o tracker src/main.cpp
 ./tracker
 ```
 
-## 5. Rebuild after changing the C++
+## 6. Rebuild after changing the C++
 
 You only need this if you edit anything in `src/`. Install the compiler once:
 
@@ -107,14 +134,20 @@ The WebAssembly command inside the scripts is:
 python -m ziglang c++ -target wasm32-wasi -Os -s -fno-exceptions -mexec-model=reactor -std=c++17 -o web/gradebook.wasm src/web_main.cpp
 ```
 
-## 6. Tests
+## 7. Tests
 
 ```bash
-node tests/engine_test.mjs               # 60 checks on the real .wasm (needs Node 18+)
-cd tests && npm install && node ui_test.mjs   # 67 browser checks; uses your installed Chrome or Edge
+node tests/engine_test.mjs               # 62 checks on the real .wasm (needs Node 18+)
+cd tests && npm install && node ui_test.mjs   # 68 browser checks; uses your installed Chrome or Edge
 ```
 
-The UI test saves screenshots to `build/shots/`.
+The cloud test runs on Firebase's **emulators**: a fake login service and database on your own computer, so it never touches the real project. It needs Java 21 or newer:
+
+```bash
+npx firebase-tools emulators:exec --project demo-gradebook "node tests/cloud_test.mjs"
+```
+
+The tests save screenshots to `build/shots/`.
 
 ---
 

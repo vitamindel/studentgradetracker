@@ -16,20 +16,21 @@ Our goal was to build a student grade tracker in C++ that does more than print a
 
 **What problem does it solve?** Teachers juggle a lot of grades, and not all assignments count the same. In our Electronics/Computer Engineering class, the Project category is 50% of the grade, Tests are 20%, and Homework, Quizzes, and Class Activity are 10% each. Working out weighted averages by hand, deciding who is passing, and figuring out who needs help is slow and easy to get wrong. Our tracker does that math instantly and shows it at a glance.
 
-**Who could use it?** Mainly teachers, but students could use it too. The "What do I need?" calculator answers the question every student asks before a test: *"What do I need on the next test to get a 90?"*
+**Who could use it?** Teachers and students, each with their own kind of account. A teacher signs in and sees the whole class. A student signs in with a code from their teacher and sees only their own report card, which updates by itself when the teacher adds a grade. The "What do I need?" calculator answers the question every student asks before a test: *"What do I need on the next test to get a 90?"*
 
 **Why we chose it:** We both know what it's like to stress about a grade without knowing where we stand, so the project felt real to us. It was also a good fit for the assignment, because grades naturally need classes (each student is an object), loops (averaging lots of scores), and if/else (Passed / Needs Improvement / Failed).
 
 ## 3. Program Description (Input → Processing → Output)
 
-**Input.** The user adds students (name and an optional starting grade) and grades (assignment name, type, and score). They can also give one assignment to the whole class at once, change the pass cutoffs, curve the class, or import a CSV file. On the website these are buttons and forms. In the terminal version it's a numbered menu read with `cin`.
+**Input.** The user signs in as a teacher or a student. A teacher adds students (name and an optional starting grade from 0 to 100) and grades (assignment name, type, and score). They can also give one assignment to the whole class at once, change the pass cutoffs, curve the class, or import a CSV file. On the website these are buttons and forms. In the terminal version it's a numbered menu read with `cin`.
 
 **Processing.** Everything is calculated in C++:
 - Each `Student` works out its own **weighted average** the same way our school portal does: it averages each category first, then weights those averages (Project 50%, Test 20%, Homework / Quiz / Class Activity 10% each). A category with no grades yet is skipped. It also works out the letter grade, GPA, **status**, and trend.
 - The `GradeBook` calculates the **class average, median, standard deviation, and pass rate**, finds the top student and the most at-risk student, sorts the roster with a selection sort, and keeps undo "snapshots".
 - The `CommandShell` reads text commands like `grade 1001 "Quiz 3" quiz 88` and calls the right method.
+- **Saving (not C++):** a teacher's class is stored in Cloud Firestore, Google's cloud database, with one document per student. Security rules on Google's servers let a teacher read and write only their own class, and a student read only their own record. When a page loads, the saved data goes back into C++ through its `import` command, so C++ still does every calculation, even on a student's page.
 
-**Output.** In the terminal, the program prints a colored roster, report cards, and ASCII bar charts with `cout`. On the website, C++ answers every command with `cout`. JavaScript then shows that answer as a message and redraws the dashboard: stat cards, a letter-grade chart, a status breakdown, a bar for every student's average with the cutoff lines drawn on it, and a line chart of each student's grade history.
+**Output.** In the terminal, the program prints a colored roster, report cards, and ASCII bar charts with `cout`. On the website, C++ answers every command with `cout`. JavaScript then shows that answer as a message and redraws the dashboard: stat cards, a letter-grade chart, a status breakdown, a bar for every student's average with the cutoff lines drawn on it, and a line chart of each student's grade history. A student account instead sees one read-only report card: average, letter, status, category table, grade history chart, and the "What do I need?" calculator.
 
 **The part we're proudest of:** the website doesn't calculate anything itself. When you click a button, JavaScript sends a text command into a C++ function called `run()`. That function temporarily points `cin` at the command and `cout` at an empty string, lets our C++ classes do the work, and hands back whatever was printed. So every button really is a `cin`/`cout` conversation with C++. There's a "C++ Console" panel on the site that shows every command and C++'s exact reply, so anyone can watch it happen.
 
@@ -54,9 +55,10 @@ We worked in stages and made sure each one worked before starting the next.
 
 1. **The C++ core.** We started with the three classes: `Student`, `GradeBook`, and `CommandShell`. We put the method bodies inside the class like in Java, because that's what we're used to from AP CSA. Then we wrote `main.cpp`, the terminal version with a menu, and tested it by feeding it a file of typed-in answers. That file included wrong ones on purpose, like "abc" and "eighty". We compiled with `g++ -std=c++17 -Wall -Wextra` and got it to zero warnings.
 2. **WebAssembly.** WebAssembly lets C++ run inside a web browser. We compiled the exact same classes with `zig c++ -target wasm32-wasi`, which was much easier to install than the usual tool (Emscripten). We wrote `web_main.cpp`, which has the `run()` function that redirects `cin` and `cout`. A browser isn't a real operating system, so we also wrote a small JavaScript file that pretends to be the eight system functions the C++ expects. We tested the compiled file with automatic checks before building any of the website.
-3. **The website.** We built the interface in plain HTML, CSS, and JavaScript, with no frameworks. Every button builds a command and sends it to C++. After every change, the page asks C++ for a `json` snapshot of the whole class and redraws from it. We added light and dark mode, made it work on a Chromebook screen and a phone, and wrote a browser test that clicks through every feature and checks for errors. It runs 67 checks.
+3. **The website.** We built the interface in plain HTML, CSS, and JavaScript, with no frameworks. Every button builds a command and sends it to C++. After every change, the page asks C++ for a `json` snapshot of the whole class and redraws from it. We added light and dark mode, made it work on a Chromebook screen and a phone, and wrote a browser test that clicks through every feature and checks for errors. It runs 68 checks.
 4. **Deploying.** We commit the compiled `.wasm` file to GitHub, and Vercel serves the `web` folder as a normal website, so nothing has to be compiled on their end.
 5. **Making it match our class.** Our first version gave each assignment its own weight (a Test counted twice as much as a Quiz). Our school portal works differently: it averages each category, then weights the categories (Project 50%, Test 20%, the rest 10%), and skips categories with no grades yet. We rewrote `average()` and `scoreNeeded()` in `Student.h` to match, and changed the demo class to our real assignment names (with made-up scores). The "What do I need?" answer got more interesting too: because a Project is half the grade, one good project can save a student when no single test can.
+6. **Accounts and a database.** We added Firebase so a teacher's class follows them to any computer, plus two kinds of accounts. Each student gets a random 8-character code from their teacher. Signing up with it ties the student's account to their one record. The hard part was security. Hiding the teacher's buttons isn't enough, because anyone can run their own JavaScript in the browser. So the real rules are in `firestore.rules`, which Google's servers check on every read and write. We tested those rules by trying the attacks ourselves on Firebase's emulator: reading another student's grades, listing the class, changing a grade, and pointing an account at a different student. All of them were refused.
 
 [If the class AI policy requires it, add a sentence here about which tools helped us and how.]
 
@@ -83,12 +85,17 @@ We tested the terminal version by feeding it a file of answers (`tests/console_i
 | 4 | `need 1006 project 70` (Ethan, no Project yet) | By hand: (70 × 100 − 2691.7) ÷ 50 = **86.17** | `Ethan Brooks needs 86.2% on the next Project to reach 70.0%.` ✅ |
 | 5 | `need 1006 test 60` (Ethan) | About 110%, so impossible | `Ethan Brooks would need 110.0% on the next Test to reach 60.0% - not possible with one Test.` ✅ |
 | 6 | `grade 1001 "Quiz 9" quiz 150` (score too high) | Rejected, nothing changes | `Error: the score must be from 0 to 120.` ✅ |
-| 7 | `thresholds 50 60` (pass cutoff below the needs-improvement cutoff) | Rejected | `Error: cutoffs must follow  0 <= needs-improvement < pass <= 100.` ✅ |
-| 8 | Website: add a student named `<b>Zoe</b> "Z" O'Neil` | Name shows as plain text; it must NOT turn bold | Shown exactly as typed; no bold tag created on the page ✅ |
-| 9 | Website: curve slider at +10, then Apply | Preview average = average after applying; Ctrl+Z undoes it | Preview 81.8 → 89.7, applied 89.73; Ctrl+Z → `Undid: curve.` ✅ |
-| 10 | Demo class: export CSV → clear the class → import the same CSV | Every student, grade, and name comes back exactly | `Imported 8 student(s) and 72 grade(s).` All identical ✅ |
+| 7 | `add "Too High" 105` (starting grade over 100) | Rejected, no student added | `Error: the starting grade must be a number from 0 to 100.` ✅ |
+| 8 | `thresholds 50 60` (pass cutoff below the needs-improvement cutoff) | Rejected | `Error: cutoffs must follow  0 <= needs-improvement < pass <= 100.` ✅ |
+| 9 | Website: add a student named `<b>Zoe</b> "Z" O'Neil` | Name shows as plain text; it must NOT turn bold | Shown exactly as typed; no bold tag created on the page ✅ |
+| 10 | Website: curve slider at +10, then Apply | Preview average = average after applying; Ctrl+Z undoes it | Preview 81.8 → 89.7, applied 89.73; Ctrl+Z → `Undid: curve.` ✅ |
+| 11 | Demo class: export CSV → clear the class → import the same CSV | Every student, grade, and name comes back exactly | `Imported 8 student(s) and 72 grade(s).` All identical ✅ |
+| 12 | Sign up as a student with the wrong code `ZZZZ-ZZZZ` | Rejected, and no account is made | `That code doesn't match any student. Check it with your teacher.` ✅ |
+| 13 | Signed in as student Marcus, ask the database for another student's record (`.../students/1003`) | Refused by the security rules | `403 Forbidden` (also refused: listing the class, changing his own grade, re-pointing his account) ✅ |
+| 14 | Teacher adds `Live Quiz` (100) for Marcus in one browser while Marcus is signed in on another | Shows up on Marcus's page without reloading | New grade appears, plus `Your teacher just updated your grades.` ✅ |
+| 15 | Teacher loads the demo class (a new roster) | Old student codes stop working | Marcus's page: `Your grades aren't available…`, and the old code is deleted from the database ✅ |
 
-In total the automatic tests run **60 checks on the C++ engine** and **67 checks on the website** (in a real Chrome browser, at desktop, Chromebook, and phone sizes), and all of them pass.
+In total the automatic tests run **62 checks on the C++ engine**, **68 checks on the website** (in a real Chrome browser, at desktop, Chromebook, and phone sizes), and **71 checks on login, accounts, and the database rules** (on Firebase's emulators), and all of them pass.
 
 ## 8. Final Reflection
 
@@ -96,4 +103,4 @@ In total the automatic tests run **60 checks on the C++ engine** and **67 checks
 
 [Partner Name]: [Your reflection, e.g. which part you built, what you'd do differently, what clicked for you.]
 
-**If we had more time,** we'd add a login so a teacher's data follows them between computers. Right now it's saved in the browser, and you move it with CSV export/import. We'd also add attendance tracking. Overall, this project showed us that C++ isn't just for black-and-white terminal programs. The same classes we'd write for a school assignment can power a real website.
+**If we had more time,** we'd let one teacher have several classes (right now each teacher account has one), add attendance tracking, and email parents a weekly summary. Overall, this project showed us that C++ isn't just for black-and-white terminal programs. The same classes we'd write for a school assignment can power a real website.

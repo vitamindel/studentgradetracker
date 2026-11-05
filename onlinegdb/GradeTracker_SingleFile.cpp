@@ -36,7 +36,7 @@ public:
         this->id = id;
 
         // The starting grade is recorded as a Quiz.
-        if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
+        if (startingGrade != NO_GRADE && isValidStartingGrade(startingGrade)) {
             grades.push_back({"Starting Grade", "Quiz", startingGrade});
         }
     }
@@ -71,9 +71,9 @@ public:
         return 0;
     }
 
-    static bool isValidScore(double score) {
-        return score >= 0 && score <= 120;
-    }
+    // Scores can go up to 120 (extra credit), but a starting grade can't.
+    static bool isValidScore(double score) { return score >= 0 && score <= 120; }
+    static bool isValidStartingGrade(double grade) { return grade >= 0 && grade <= 100; }
 
     // Getters and setters
     std::string getName() const { return name; }
@@ -469,7 +469,7 @@ public:
     // Returns the new student's ID, or -1 if the input was invalid.
     int addStudent(const std::string& name, double startingGrade) {
         if (!isValidName(name)) return -1;
-        if (startingGrade != Student::NO_GRADE && !Student::isValidScore(startingGrade)) return -1;
+        if (startingGrade != Student::NO_GRADE && !Student::isValidStartingGrade(startingGrade)) return -1;
 
         saveSnapshot("add student");
         int newId = nextId;
@@ -1018,8 +1018,8 @@ private:
         double starting = Student::NO_GRADE;
         std::string gradeWord;
         if (readText(args, gradeWord)) {
-            if (!parseNumber(gradeWord, starting) || !Student::isValidScore(starting)) {
-                out << "Error: the starting grade must be a number from 0 to 120.\n";
+            if (!parseNumber(gradeWord, starting) || !Student::isValidStartingGrade(starting)) {
+                out << "Error: the starting grade must be a number from 0 to 100.\n";
                 return;
             }
         }
@@ -1808,7 +1808,7 @@ void addStudentMenu(GradeBook& book) {
         cout << paint("  Names must be 1-40 characters.\n", RED);
         return;
     }
-    double grade = readDouble("  Starting grade (0-120): ", 0, 120);
+    double grade = readDouble("  Starting grade (0-100): ", 0, 100);
     int id = book.addStudent(name, grade);
     cout << paint("  Added " + name + " with ID " + to_string(id) + ".\n", GREEN);
 }

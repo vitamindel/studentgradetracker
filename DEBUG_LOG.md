@@ -128,3 +128,19 @@ A running list of every real problem we hit while building the Student Grade Tra
 - **What happened:** In the new *Grading categories* card, the Project tile (no grades yet) had all its text centered, unlike the other four.
 - **Cause:** We marked it with the CSS class `empty`, but `.empty` already existed in our stylesheet for the roster's "No students yet" box, which centers everything.
 - **Fix:** Renamed our class to `no-grades`. Found by screenshotting the page instead of assuming the CSS was fine.
+
+## Stage 6: Teacher/student accounts and the cloud database
+
+### 18. The test couldn't click "Student" on the sign-up form
+- **What happened:** The cloud test froze for 30 seconds on `page.check('input[value="student"]')`, then failed with *"`<label class="seg">` intercepts pointer events"*.
+- **Cause:** The Teacher/Student picker is a pair of radio buttons styled as two big buttons. The real radio circles are invisible on purpose, and the label sits on top. The test tried to click the invisible circle, which a real person can't do either.
+- **Fix:** The test clicks the label, which is what a person does. The app was fine.
+- **A second test hiccup:** "undo restores the same code" failed once because the test waited a fixed 1.5 seconds. A save waits 0.7 s for you to stop clicking, then talks to the database. The test now checks every 0.2 s until the code appears (up to 10 s), and it passed while the page still said "Saving…". This is the same lesson as #16: wait for the thing you're checking, not for a number you guessed.
+
+### 19. ⭐ A new student could have inherited an old student's login code
+- **What happened:** We found this one by thinking it through, before it caused a visible bug. A student's code was linked to their **ID** (like 1002). But **Load demo**, **Clear all students**, and **Import CSV** start the IDs over at 1001. So if a teacher cleared the class and added a new student, the new student 1002 would get the *old* 1002's code, and the old student's account could suddenly read the new student's grades.
+- **Fix:** Those three commands now give every student a brand-new code, and each save deletes any code that no current student uses. (Undoing a single removal still brings back the same code, because it's the same student.) The cloud test proves it: after the teacher loads the demo, the old student account is cut off and the old code document is gone.
+- **Lesson:** Security bugs often hide in "this can't happen" assumptions. Here the assumption was "IDs are never reused."
+
+### Caught in review (before it caused a visible bug)
+- **Deleting a code that was never saved:** If a student was added and removed before their first save, the save would have tried to delete a `joinCodes` document that didn't exist. Our security rule allows a delete only when `resource.data.teacherUid` is the teacher, and a missing document has no data, so Firestore would have refused the **whole batch** and nothing would save. Now a save only deletes codes it knows are in the database.

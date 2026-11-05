@@ -19,5 +19,9 @@ Thumbs.db
 # Vercel CLI
 .vercel
 
+# Firebase emulator logs (from tests/cloud_test.mjs)
+*-debug.log
+.firebase/
+
 # NOTE: web/gradebook.wasm is NOT ignored on purpose. It is committed so
 # Vercel can serve the site without compiling any C++.

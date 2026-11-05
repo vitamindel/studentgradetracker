@@ -56,6 +56,9 @@
       <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M6 18l2-2M16 8l2-2"/></symbol>
       <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5H7z"/></symbol>
     </defs>
   </svg>
 
@@ -67,6 +70,40 @@
       <p class="boot-sub" id="boot-sub">Downloading gradebook.wasm</p>
       <div class="boot-bar"><span></span></div>
     </div>
+  </div>
+
+  <!-- ============ LOGIN (only when Firebase is set up in firebase-config.js) ============ -->
+  <div id="login" class="login" hidden>
+    <form class="login-card" id="login-form" novalidate>
+      <div class="logo-mark logo-mark--lg" aria-hidden="true"><span>++</span></div>
+      <h1 class="login-title" id="login-title">Sign in to Gradebook++</h1>
+      <p class="login-sub" id="login-sub">Teachers keep their class in a cloud database. Students see their own grades.</p>
+      <fieldset class="field role-pick" id="role-pick" hidden>
+        <legend>I'm a</legend>
+        <div class="segmented">
+          <label class="seg"><input type="radio" name="role" value="teacher" checked>Teacher</label>
+          <label class="seg"><input type="radio" name="role" value="student">Student</label>
+        </div>
+      </fieldset>
+      <label class="field" id="code-field" hidden><span>Student code <em>(your teacher gives you this)</em></span><input id="login-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" maxlength="9"></label>
+      <div class="login-creds" id="login-creds">
+      <button class="btn btn-secondary btn-block login-google" type="button" id="google-btn">
+        <svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        Continue with Google
+      </button>
+      <div class="login-or"><span>or use your email</span></div>
+      <label class="field"><span>Email</span><input id="login-email" type="email" autocomplete="email" required></label>
+      <label class="field"><span>Password</span><input id="login-password" type="password" autocomplete="current-password" minlength="6" required></label>
+      </div>
+      <p class="login-msg" id="login-msg" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit" id="login-submit">Sign in</button>
+      <p class="login-links" id="login-links">
+        <span id="login-switch-text">New here?</span> <button type="button" class="link" id="login-switch">Create an account</button>
+        <span id="login-forgot-wrap"> · <button type="button" class="link" id="login-forgot">Forgot password?</button></span>
+      </p>
+      <p class="login-links" id="login-signout-wrap" hidden><button type="button" class="link" id="login-signout">Sign out</button></p>
+      <p class="login-guest" id="login-guest-wrap"><button type="button" class="link" id="login-guest">Use without an account</button><br>Your class is then saved in this browser only.</p>
+    </form>
   </div>
 
   <!-- ============ TOP BAR ============ -->
@@ -83,18 +120,21 @@
       <span class="engine-pill" id="engine-pill" title="All grade logic runs in C++ compiled to WebAssembly">
         <span class="engine-dot" aria-hidden="true"></span><span id="engine-pill-text">C++ engine</span>
       </span>
+      <button class="engine-pill sync-pill" id="sync-pill" type="button" hidden>
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-cloud"/></svg><span id="sync-text">Saved to cloud</span>
+      </button>
 
       <div class="appbar-actions">
-        <button class="btn btn-ghost btn-icon-text" id="undo-btn" type="button" disabled title="Undo (Ctrl+Z)">
+        <button class="btn btn-ghost btn-icon-text teacher-only" id="undo-btn" type="button" disabled title="Undo (Ctrl+Z)">
           <svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg><span class="hide-sm">Undo</span>
         </button>
-        <button class="btn btn-secondary btn-icon-text" id="curve-btn" type="button">
+        <button class="btn btn-secondary btn-icon-text teacher-only" id="curve-btn" type="button">
           <svg class="icon" aria-hidden="true"><use href="#i-curve"/></svg><span class="hide-md">Curve</span>
         </button>
-        <button class="btn btn-secondary btn-icon-text" id="assign-btn" type="button">
+        <button class="btn btn-secondary btn-icon-text teacher-only" id="assign-btn" type="button">
           <svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg><span class="hide-md">Assignment</span>
         </button>
-        <button class="btn btn-primary btn-icon-text" id="add-student-btn" type="button">
+        <button class="btn btn-primary btn-icon-text teacher-only" id="add-student-btn" type="button">
           <svg class="icon" aria-hidden="true"><use href="#i-user-plus"/></svg><span class="hide-sm">Student</span>
         </button>
         <div class="menu-wrap">
@@ -102,6 +142,15 @@
             <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
           </button>
           <div class="menu" id="menu" role="menu" hidden>
+            <div class="menu-account" id="menu-account" hidden>
+              <span class="avatar" id="account-avatar" aria-hidden="true"></span>
+              <span class="menu-account-text"><strong id="account-name"></strong><span id="account-sub">Saved to cloud</span></span>
+            </div>
+            <button role="menuitem" type="button" data-action="signin" id="menu-signin" hidden><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>Sign in to save online</button>
+            <button role="menuitem" type="button" data-action="codes" id="menu-codes" hidden><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>Student login codes…</button>
+            <button role="menuitem" type="button" data-action="signout" id="menu-signout" hidden><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Sign out</button>
+            <div class="teacher-only">
+            <hr id="menu-account-hr" hidden>
             <button role="menuitem" type="button" data-action="export"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export CSV</button>
             <button role="menuitem" type="button" data-action="import"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Import CSV…</button>
             <hr>
@@ -110,6 +159,7 @@
             <hr>
             <button role="menuitem" type="button" data-action="demo"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg>Load demo class</button>
             <button role="menuitem" type="button" data-action="clear" class="danger"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Clear all students</button>
+            </div>
           </div>
         </div>
         <button class="btn btn-ghost btn-icon" id="theme-btn" type="button" aria-label="Theme: system">
@@ -332,10 +382,10 @@
         <h2 id="d-name">Student</h2>
         <p class="muted" id="d-id">ID</p>
       </div>
-      <button class="btn btn-ghost btn-icon" id="d-rename" type="button" aria-label="Rename student" title="Rename">
+      <button class="btn btn-ghost btn-icon teacher-only" id="d-rename" type="button" aria-label="Rename student" title="Rename">
         <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
       </button>
-      <button class="btn btn-ghost btn-icon" id="d-close" type="button" aria-label="Close panel">
+      <button class="btn btn-ghost btn-icon teacher-only" id="d-close" type="button" aria-label="Close panel">
         <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
       </button>
     </div>
@@ -346,6 +396,7 @@
     </form>
 
     <div class="drawer-body">
+      <p class="student-note">Your teacher keeps these grades up to date. This page changes by itself when they do.</p>
       <div class="d-summary">
         <div class="d-avg"><span id="d-average">0.0</span><span class="unit">%</span></div>
         <dl class="d-facts">
@@ -390,7 +441,7 @@
       <section class="d-section">
         <h3>Grades <span class="muted" id="d-count"></span></h3>
         <ol class="grade-list" id="d-grades"></ol>
-        <form class="add-grade" id="add-grade-form">
+        <form class="add-grade teacher-only" id="add-grade-form">
           <input id="g-label" placeholder="Assignment name" maxlength="40" required aria-label="Assignment name">
           <select id="g-type" class="type-select" data-default="test" aria-label="Category"></select>
           <input id="g-score" type="number" min="0" max="120" step="0.1" placeholder="Score" required aria-label="Score">
@@ -398,7 +449,13 @@
         </form>
       </section>
 
-      <button class="btn btn-danger-ghost btn-block" id="d-remove" type="button">
+      <section class="d-section join-card" id="d-code-section" hidden>
+        <h3><svg class="icon icon-sm" aria-hidden="true"><use href="#i-user"/></svg>Student login</h3>
+        <p class="join-help">Give <span id="d-code-name">this student</span> this code. They pick <strong>Student</strong> when making an account, and they'll only see their own grades.</p>
+        <div class="join-row"><code class="join-code" id="d-code">ABCD-EFGH</code><button class="btn btn-secondary btn-sm" type="button" id="d-code-copy">Copy</button></div>
+      </section>
+
+      <button class="btn btn-danger-ghost btn-block teacher-only" id="d-remove" type="button">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-trash"/></svg>Remove student
       </button>
     </div>
@@ -410,8 +467,17 @@
       <header class="modal-head"><h2>Add student</h2><button class="btn btn-ghost btn-icon" value="cancel" formnovalidate aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
       <p class="modal-note">Calls the C++ constructor <code>Student(name, id, startingGrade)</code>.</p>
       <label class="field"><span>Full name</span><input id="new-name" maxlength="40" required autocomplete="off"></label>
-      <label class="field"><span>Starting grade <em>(optional, 0–120)</em></span><input id="new-grade" type="number" min="0" max="120" step="0.1"></label>
+      <label class="field"><span>Starting grade <em>(optional, 0–100)</em></span><input id="new-grade" type="number" min="0" max="100" step="0.1"></label>
       <footer class="modal-foot"><button class="btn btn-ghost" value="cancel" formnovalidate>Cancel</button><button class="btn btn-primary" value="ok">Add student</button></footer>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal-wide" id="dlg-codes">
+    <form method="dialog" class="modal-form">
+      <header class="modal-head"><h2>Student login codes</h2><button class="btn btn-ghost btn-icon" value="cancel" formnovalidate aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
+      <p class="modal-note">Each student makes an account, picks <strong>Student</strong>, and types their code. The database only lets them see their own grades.</p>
+      <div class="codes-wrap"><table class="d-cats codes-table"><thead><tr><th scope="col">Student</th><th scope="col">ID</th><th scope="col">Code</th></tr></thead><tbody id="codes-body"></tbody></table></div>
+      <footer class="modal-foot"><button class="btn btn-secondary" type="button" id="codes-copy">Copy all</button><button class="btn btn-primary" value="cancel">Done</button></footer>
     </form>
   </dialog>
 
@@ -494,7 +560,7 @@
   <input type="file" id="file-input" accept=".csv,text/csv" hidden>
 
   <!-- ============ C++ CONSOLE DOCK ============ -->
-  <section class="console" id="console" aria-label="C++ console">
+  <section class="console teacher-only" id="console" aria-label="C++ console">
     <button class="console-bar" id="console-toggle" type="button" aria-expanded="false" aria-controls="console-panel">
       <svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>
       <strong>C++ Console</strong>

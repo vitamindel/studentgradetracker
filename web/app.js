@@ -1,6 +1,7 @@
 // app.js - the website's UI. No grade logic here: every button sends a text
 // command to C++ with cpp("..."), then the page is redrawn from C++'s "json".
 import { loadEngine, quote } from "./engine.js";
+import * as cloud from "./cloud.js";
 
 const STORAGE_KEY = "gradebookpp:v2";
 const THEME_KEY = "gradebookpp:theme";
@@ -14,6 +15,9 @@ let engine = null;     // { run(command) } once the .wasm has loaded
 let state = null;      // the latest "json" answer from C++
 let prevState = null;  // the answer before that (for "since last change")
 let bootInfo = "";
+let mode = "local";    // "local" (saved in this browser), "cloud" (teacher account), or "student" (read-only)
+let user = null;       // the signed-in Firebase user
+let started = false;   // true once a class has been loaded (local or cloud)
 
 const ui = {
   sort: "name",        // same values as the <select>: "name", "average desc", ...
@@ -99,9 +103,15 @@ function act(command, { undoable = true, quiet = false } = {}) {
     toast(out.replace(/^Error:\s*/, ""), "error");
   } else {
     if (!quiet) toast(firstLine(out), "success", undoable ? { label: "Undo", onClick: doUndo } : null);
+    afterCommand(command);
     refresh();
   }
   return { ok, out };
+}
+
+// "demo", "clear" and "import" start a new roster, so every student gets a new login code.
+function afterCommand(command) {
+  if (mode === "cloud" && /^(demo|clear|import)\b/.test(command.trim())) cloud.resetCodes();
 }
 
 function doUndo() {
@@ -112,10 +122,12 @@ function doUndo() {
   act("undo", { undoable: false });
 }
 
-// ----- SAVING (localStorage holds the C++ CSV export + settings) -----
+// ----- SAVING (signed in: the cloud database; otherwise localStorage holds the C++ CSV export) -----
 let saveTimer = null;
+let cloudQueue = Promise.resolve();   // cloud saves run one at a time, in order
 
 function scheduleSave() {
+  if (!started) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 700);   // wait for a pause, then save once
 }
@@ -123,7 +135,11 @@ function scheduleSave() {
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  if (!engine || !state) return;
+  if (!engine || !state || mode === "student") return;   // students can't change anything
+  if (mode === "cloud") {
+    saveToCloud();
+    return;
+  }
   const csv = cpp("export", "auto");
   storageSet(STORAGE_KEY, {
     csv,
@@ -142,28 +158,373 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushSave();
 });
 
-// Replays the saved CSV + settings into C++ (or loads the demo the first time).
-function restore() {
+function restorePrefs() {
   const prefs = storageGet(PREFS_KEY);
   if (prefs && typeof prefs.sort === "string") ui.sort = prefs.sort;
   $("#sort-select").value = ui.sort;
   if ($("#sort-select").value !== ui.sort) ui.sort = $("#sort-select").value = "name";
+}
 
+// Replays a saved CSV + settings into C++.
+function applySaved(saved) {
+  const rows = saved.csv.split("\n").filter((line) => line.trim()).length;
+  cpp(rows > 1 ? "import\n" + saved.csv : "clear", "auto");
+  if (saved.className) cpp(`classname ${quote(saved.className)}`, "auto");
+  if (Number.isFinite(saved.passCutoff) && Number.isFinite(saved.needsCutoff)) {
+    cpp(`thresholds ${saved.passCutoff} ${saved.needsCutoff}`, "auto");
+  }
+}
+
+// Loads this browser's saved class (or the demo the first time).
+function restore() {
   const saved = storageGet(STORAGE_KEY);
   let restored = false;
   if (saved && typeof saved.csv === "string") {
-    const rows = saved.csv.split("\n").filter((line) => line.trim()).length;
-    if (rows > 1) cpp("import\n" + saved.csv, "auto");
-    if (saved.className) cpp(`classname ${quote(saved.className)}`, "auto");
-    if (Number.isFinite(saved.passCutoff) && Number.isFinite(saved.needsCutoff)) {
-      cpp(`thresholds ${saved.passCutoff} ${saved.needsCutoff}`, "auto");
-    }
+    applySaved(saved);
     restored = true;
   } else {
     cpp("demo", "auto");   // first visit: start with a sample class
   }
   cpp("resetundo", "auto");   // so Ctrl+Z can't undo the page load
   return restored;
+}
+
+// Guest mode: no account, the class lives in this browser.
+function startLocal() {
+  mode = "local";
+  started = true;
+  const restored = restore();
+  refresh();
+  renderAccount();
+  if (restored) toast(`Welcome back! Restored ${state.students.length} students from this browser.`, "success");
+}
+
+// ----- CLOUD DATABASE (Cloud Firestore, through cloud.js) -----
+
+// One document per student, copied from C++'s json (C++ already did the math).
+function cloudData() {
+  return {
+    className: state.className,
+    passCutoff: state.passCutoff,
+    needsCutoff: state.needsCutoff,
+    students: state.students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      average: s.average,
+      letter: s.letter,
+      status: s.status,
+      grades: s.grades.map((g) => ({ label: g.label, type: g.type, score: g.score })),
+    })),
+  };
+}
+
+// Turns the database's student documents back into the CSV that C++'s "import" reads.
+function cloudToSaved(data) {
+  const field = (text) => (/[",]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+  const rows = ["id,name,assignment,type,score"];
+  for (const s of data.students) {
+    const start = `${s.id},${field(String(s.name))}`;
+    if (!s.grades.length) rows.push(`${start},,,`);
+    for (const g of s.grades) rows.push(`${start},${field(String(g.label))},${g.type},${g.score}`);
+  }
+  return { csv: rows.join("\n") + "\n", className: data.className, passCutoff: data.passCutoff, needsCutoff: data.needsCutoff };
+}
+
+function saveToCloud() {
+  const uid = user.uid;
+  const data = cloudData();
+  setSync("saving");
+  cloudQueue = cloudQueue
+    .then(() => cloud.saveClass(uid, data))
+    .then(() => setSync("saved"), (err) => {
+      console.error(err);
+      setSync("error");
+      toast(`Couldn't save to the cloud: ${cloud.friendlyError(err)}`, "error");
+    });
+}
+
+// Signed in: is this a teacher or a student account? Then load the right view.
+async function startAccount(newUser) {
+  setupUser = newUser;
+  if (ui.selectedId !== null) closeDrawer();
+  $("#login").hidden = true;
+  showBoot("Signing you in…");
+  try {
+    let account = await cloud.getAccount(newUser.uid);
+    if (!account && pendingRole) account = await cloud.setAccount(newUser, pendingRole.role, pendingRole.code);
+    pendingRole = null;
+    if (!account) showLogin("", "setup");   // e.g. a first Google sign-in: ask teacher or student
+    else if (account.role === "student") await startStudent(newUser, account);
+    else await startTeacher(newUser);
+  } catch (err) {
+    console.error(err);
+    pendingRole = null;
+    showLogin(cloud.friendlyError(err), "setup");
+  }
+}
+
+// Teacher account: their whole class, loaded from the database.
+async function startTeacher(newUser) {
+  const keepGuestClass = started && mode === "local" && state.students.length > 0;
+  showBoot("Loading your class from the database…");
+  try {
+    const data = await cloud.loadClass(newUser.uid);
+    user = newUser;
+    mode = "cloud";
+    if (data) applySaved(cloudToSaved(data));
+    else if (!keepGuestClass) cpp("demo", "auto");   // brand-new account: start with the sample class
+    cpp("resetundo", "auto");
+    started = true;
+    refresh();   // also saves, so a new account's class goes into the database
+    renderAccount();
+    $("#boot").classList.add("done");
+    const who = newUser.displayName || newUser.email;
+    toast(data ? `Signed in as ${who}. Loaded ${state.students.length} students from the database.`
+      : `Welcome, ${who}! Your class is now saved in the cloud.`, "success");
+  } catch (err) {
+    console.error(err);
+    showLogin(`Couldn't load your class: ${cloud.friendlyError(err)}`, "setup");
+  }
+}
+
+// Student account: only their own record, read-only, updated live when the teacher saves.
+async function startStudent(newUser, account) {
+  user = newUser;
+  mode = "student";
+  document.body.classList.add("student-mode");
+  let first = true;
+  const showGrades = (data) => {
+    applySaved(cloudToSaved(data));   // C++ gets just this one student
+    cpp("resetundo", "auto");
+    started = true;
+    ui.selectedId = data.students[0].id;
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    refresh();
+    if (first) {
+      first = false;
+      renderAccount();
+      $("#login").hidden = true;
+      $("#boot").classList.add("done");
+      toast(`Signed in as ${newUser.displayName || newUser.email}. These are your grades.`, "success");
+    } else {
+      toast("Your teacher just updated your grades.", "success");
+    }
+  };
+  try {
+    stopWatching = await cloud.watchStudent(account, showGrades, studentLost);
+  } catch (err) {
+    studentLost(err);
+  }
+}
+
+function studentLost(err) {
+  console.warn(err);   // expected when the teacher removes the student
+  if (stopWatching) stopWatching();
+  stopWatching = null;
+  showLogin("Your grades aren't available. Your teacher may have removed you or given you a new code. "
+    + "Type your new code, or sign out.", "setup", "student");
+}
+
+function onUserChanged(newUser) {
+  const known = user || setupUser;
+  if (newUser && (!known || newUser.uid !== known.uid)) startAccount(newUser);
+  else if (!newUser && known) location.reload();   // signed out: back to the login screen
+  else if (!newUser && !started && $("#login").hidden) showLogin();
+}
+
+// Header pill + menu text showing where the class is saved.
+function setSync(status) {
+  const text = { saved: "Saved to cloud", saving: "Saving…", error: "Not saved", guest: "Sign in to save online", live: "Live grades" }[status];
+  $("#sync-pill").className = `engine-pill sync-pill is-${status}`;
+  $("#sync-pill").hidden = false;
+  $("#sync-text").textContent = text;
+  $("#account-sub").textContent = mode === "student" ? "Student account · live grades" : `Teacher account · ${text}`;
+}
+
+function renderAccount() {
+  const signedIn = mode === "cloud" || mode === "student";
+  $("#menu-account").hidden = !signedIn;
+  $("#menu-signout").hidden = !signedIn;
+  $("#menu-codes").hidden = mode !== "cloud";
+  $("#menu-signin").hidden = !cloud.cloudEnabled || signedIn;
+  $("#menu-account-hr").hidden = !cloud.cloudEnabled;
+  if (signedIn) {
+    const name = user.displayName || user.email || "Signed in";
+    $("#account-name").textContent = name;
+    $("#account-avatar").textContent = initials(name);
+  }
+  if (cloud.cloudEnabled) setSync(mode === "student" ? "live" : signedIn ? "saved" : "guest");
+}
+
+$("#sync-pill").addEventListener("click", () => {
+  if (mode === "student") toast("When your teacher changes a grade, it shows up here by itself.", "success");
+  else if (mode !== "cloud") showLogin();
+  else if ($("#sync-pill").classList.contains("is-error")) save();   // try again
+  else toast("Everything is saved in the cloud database.", "success");
+});
+
+// ----- student login codes (teacher view) -----
+async function copyText(text, what) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`Copied ${what}.`, "success");
+  } catch (err) {
+    toast("Couldn't copy. Select the text and copy it yourself.", "error");
+  }
+}
+$("#d-code-copy").addEventListener("click", () => copyText($("#d-code").textContent, "the code"));
+
+function openCodes() {
+  $("#codes-body").innerHTML = state.students.length
+    ? state.students.map((s) => `<tr><td>${escapeHtml(s.name)}</td><td>${s.id}</td>
+        <td><code>${cloud.formatCode(cloud.codeFor(s.id))}</code></td></tr>`).join("")
+    : `<tr><td colspan="3" class="muted">No students yet.</td></tr>`;
+  $("#dlg-codes").showModal();
+}
+$("#codes-copy").addEventListener("click", () => copyText(
+  state.students.map((s) => `${s.name}\t${cloud.formatCode(cloud.codeFor(s.id))}`).join("\n"), "all the codes"));
+
+// ----- LOGIN (Firebase Authentication, through cloud.js) -----
+let loginMode = "signin";   // "signin", "create", or "setup" (signed in, but teacher/student not picked yet)
+let pendingRole = null;     // { role, code } picked on the create-account form
+let setupUser = null;       // the Firebase user being signed in
+let stopWatching = null;    // stops the student view's live updates
+
+function showBoot(message) {
+  $(".boot-title").textContent = message;
+  $("#boot-sub").textContent = "";
+  $("#boot").classList.remove("done");
+}
+
+function showLogin(message = "", newMode = "signin", role = "teacher") {
+  closeMenu();
+  $(`input[name="role"][value="${role}"]`).checked = true;
+  setLoginMode(newMode);
+  loginMessage(message);
+  $("#login-guest").textContent = started ? "Back to my class" : "Use without an account";
+  $("#login").hidden = false;
+  $("#boot").classList.add("done");
+  (newMode === "setup" ? $('input[name="role"]:checked') : $("#login-email")).focus();
+}
+
+function setLoginMode(newMode) {
+  loginMode = newMode;
+  const create = newMode === "create";
+  const setup = newMode === "setup";
+  $("#login-title").textContent = setup ? "One more step" : create ? "Create your account" : "Sign in to Gradebook++";
+  $("#login-sub").textContent = setup ? "Is this a teacher account or a student account?"
+    : "Teachers keep their class in a cloud database. Students see their own grades.";
+  $("#login-submit").textContent = setup ? "Continue" : create ? "Create account" : "Sign in";
+  $("#login-switch-text").textContent = create ? "Already have an account?" : "New here?";
+  $("#login-switch").textContent = create ? "Sign in" : "Create an account";
+  $("#login-password").autocomplete = create ? "new-password" : "current-password";
+  $("#login-forgot-wrap").hidden = create;
+  $("#role-pick").hidden = !(create || setup);
+  $("#login-creds").hidden = setup;
+  $("#login-links").hidden = setup;
+  $("#login-guest-wrap").hidden = setup;
+  $("#login-signout-wrap").hidden = !setup;
+  updateRoleFields();
+}
+
+const chosenRole = () => $('input[name="role"]:checked').value;
+function updateRoleFields() {
+  $("#code-field").hidden = $("#role-pick").hidden || chosenRole() !== "student";
+}
+$$('input[name="role"]').forEach((radio) => radio.addEventListener("change", updateRoleFields));
+
+// The teacher/student choice. A student's code is checked before any account is made.
+async function pickRole() {
+  if (chosenRole() === "teacher") return { role: "teacher" };
+  const code = cloud.cleanCode($("#login-code").value);
+  if (!code) throw Object.assign(new Error("no code"), { code: "gradebook/no-code" });
+  if (!(await cloud.lookupCode(code))) throw Object.assign(new Error("bad code"), { code: "gradebook/bad-code" });
+  return { role: "student", code };
+}
+
+function loginMessage(text, kind = "error") {
+  const el = $("#login-msg");
+  el.textContent = text;
+  el.className = `login-msg${kind === "info" ? " is-info" : ""}`;
+  el.hidden = !text;
+}
+
+// Runs a sign-in step, showing any error on the form; on success onUserChanged() takes over.
+async function tryLogin(step) {
+  loginMessage("");
+  $$("#login-form button").forEach((b) => { b.disabled = true; });
+  try {
+    await step();
+  } catch (err) {
+    pendingRole = null;
+    loginMessage(cloud.friendlyError(err));
+  }
+  $$("#login-form button").forEach((b) => { b.disabled = false; });
+}
+
+$("#login-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (loginMode === "setup") {
+    tryLogin(async () => {
+      const choice = await pickRole();
+      const account = await cloud.setAccount(setupUser, choice.role, choice.code);
+      $("#login").hidden = true;
+      if (account.role === "student") await startStudent(setupUser, account);
+      else await startTeacher(setupUser);
+    });
+    return;
+  }
+  const email = $("#login-email").value.trim();
+  const password = $("#login-password").value;
+  if (!email || !password) {
+    loginMessage("Type your email and password.");
+    return;
+  }
+  tryLogin(async () => {
+    if (loginMode === "create") {
+      pendingRole = await pickRole();
+      await cloud.signUp(email, password);
+    } else {
+      await cloud.signIn(email, password);
+    }
+  });
+});
+$("#google-btn").addEventListener("click", () => tryLogin(async () => {
+  pendingRole = loginMode === "create" ? await pickRole() : null;
+  await cloud.signInWithGoogle();
+}));
+$("#login-switch").addEventListener("click", () => {
+  setLoginMode(loginMode === "create" ? "signin" : "create");
+  loginMessage("");
+});
+$("#login-forgot").addEventListener("click", async () => {
+  const email = $("#login-email").value.trim();
+  if (!email) {
+    loginMessage("Type your email above first, then click Forgot password.");
+    return;
+  }
+  try {
+    await cloud.resetPassword(email);
+    loginMessage(`If there's an account for ${email}, a reset link is on its way.`, "info");
+  } catch (err) {
+    loginMessage(cloud.friendlyError(err));
+  }
+});
+$("#login-guest").addEventListener("click", () => {
+  $("#login").hidden = true;
+  if (!started) startLocal();
+});
+$("#login-signout").addEventListener("click", async () => {
+  await cloud.signOutUser();
+  location.reload();
+});
+
+async function signOut() {
+  if (saveTimer) save();
+  await cloudQueue;   // let the last save finish first
+  if (stopWatching) stopWatching();
+  await cloud.signOutUser();   // onUserChanged() then reloads the page
 }
 
 function savePrefs() {
@@ -497,7 +858,7 @@ function openDrawer(id) {
 }
 
 function closeDrawer() {
-  if (ui.selectedId === null) return;
+  if (ui.selectedId === null || mode === "student") return;
   ui.selectedId = null;
   drawer.classList.remove("open");
   drawer.setAttribute("aria-hidden", "true");
@@ -537,6 +898,12 @@ function renderDrawer() {
           <button class="btn btn-ghost btn-icon" type="button" data-del="${i + 1}" aria-label="Delete grade ${i + 1}">${icon("i-trash", "icon icon-sm")}</button>
         </span></li>`).join("")
     : `<li class="muted" style="grid-template-columns:1fr">No grades yet.</li>`;
+
+  $("#d-code-section").hidden = mode !== "cloud";
+  if (mode === "cloud") {
+    $("#d-code").textContent = cloud.formatCode(cloud.codeFor(s.id));
+    $("#d-code-name").textContent = s.name.split(" ")[0];
+  }
   drawLineChart();
 }
 
@@ -1007,7 +1374,7 @@ $("#console-form").addEventListener("submit", (e) => {
   historyIndex = cmdHistory.length;
   input.value = "";
   consoleLog.scrollTop = consoleLog.scrollHeight;
-  cpp(command, "you");
+  if (!cpp(command, "you").trim().startsWith("Error")) afterCommand(command);
   refresh();   // the command may have changed the class
 });
 $("#console-cmd").addEventListener("keydown", (e) => {
@@ -1044,7 +1411,9 @@ async function runAction(action) {
       `All ${state.students.length} students and their grades will be removed. You can undo it.`, "Remove all"))) return;
     closeDrawer();
     act("clear");
-  }
+  } else if (action === "codes") openCodes();
+  else if (action === "signin") showLogin();
+  else if (action === "signout") signOut();
 }
 
 document.addEventListener("click", (e) => {
@@ -1068,7 +1437,7 @@ $("#menu-btn").addEventListener("click", (e) => {
   const menu = $("#menu");
   menu.hidden = !menu.hidden;
   $("#menu-btn").setAttribute("aria-expanded", String(!menu.hidden));
-  if (!menu.hidden) menu.querySelector("button").focus();
+  if (!menu.hidden) menu.querySelector("button:not([hidden])").focus();
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".menu-wrap")) closeMenu();
@@ -1130,7 +1499,7 @@ $$(".th-sort").forEach((btn) => btn.addEventListener("click", () => {
 // ----- keyboard shortcuts -----
 document.addEventListener("keydown", (e) => {
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
-  const dialogOpen = document.querySelector("dialog[open]");
+  const dialogOpen = document.querySelector("dialog[open]") || !$("#login").hidden;
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z" && !typing && !dialogOpen) {
     e.preventDefault();
     doUndo();
@@ -1170,13 +1539,10 @@ async function boot() {
     const ms = performance.now() - started;
     bootInfo = `${(bytes.byteLength / 1024).toFixed(0)} KB · ready in ${ms.toFixed(0)} ms`;
 
-    const restored = restore();
-    refresh();
     $("#engine-pill").classList.add("ready");
     $("#engine-pill-text").textContent = "C++ engine running";
     $("#engine-pill").title = `gradebook.wasm (${bootInfo}). All grade logic runs in C++.`;
-    bootEl.classList.add("done");
-    if (restored) toast(`Welcome back! Restored ${state.students.length} students from this browser.`, "success");
+    restorePrefs();
   } catch (err) {
     console.error(err);
     bootEl.classList.add("error");
@@ -1184,6 +1550,23 @@ async function boot() {
     $("#boot-sub").textContent = location.protocol === "file:"
       ? "Browsers block WebAssembly on file:// pages. Run  python -m http.server 8000 -d web  and open http://localhost:8000, or use the Vercel link."
       : `Problem: ${err.message}. Try reloading the page.`;
+    return;
+  }
+
+  if (!cloud.cloudEnabled) {
+    bootEl.classList.add("done");
+    startLocal();
+    return;
+  }
+  showBoot("Checking sign-in…");
+  try {
+    await cloud.initCloud();
+    cloud.onUserChanged(onUserChanged);
+  } catch (err) {
+    console.error(err);
+    bootEl.classList.add("done");
+    startLocal();
+    toast("Couldn't reach the login service, so your class is saved in this browser for now.", "error");
   }
 }
 

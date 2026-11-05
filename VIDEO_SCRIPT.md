@@ -4,8 +4,10 @@
 **Speaking pace:** about 450 words total, so speak at a normal, relaxed speed. Times are approximate.
 
 ### Before you hit record
-- Open the Vercel link in Chrome at full screen. Use **light mode** (the theme button in the top bar).
+- Open the Vercel link in Chrome at full screen and **sign in with your teacher account**. Use **light mode** (the theme button in the top bar).
 - Open **⋯ → Load demo class** so you start from the same 8 students every take.
+- Open **⋯ → Student login codes** and copy **Ethan Brooks's** code. In a separate **Incognito window**, make a student account with that code (once is enough; it stays signed in). Keep that window ready to switch to.
+- Loading the demo gives every student a **new** code, so load it *before* copying Ethan's code. Between takes, undo your changes with Ctrl+Z instead of reloading the demo.
 - In a second tab, have `src/web_main.cpp` open (GitHub or VS Code), scrolled to `run()`.
 - In a third tab, have `DEBUG_LOG.md` open at entry **#11 (Export CSV)**.
 - Close other tabs and turn off notifications.
@@ -33,7 +35,8 @@
 | 0:59 | **B** | "And a curve. The slider previews the new average before anything changes. C++ works that out on a copy of the class." | Click **Curve**, drag to **+6**, pause on the before → after numbers, click **Apply curve** |
 | 1:07 | **A** | "Watch the bars slide. And if we change our minds…" | Bars animate. Then press **Ctrl+Z**. |
 | 1:11 | **A** | "…Ctrl+Z. Undo works because C++ saves a snapshot of the whole class before every change." | Bars slide back, toast says *"Undid: curve."* |
-| 1:15 | **B** | "It saves automatically, works on a phone, and has dark mode." | Click the theme button twice to show dark, then once more to go back |
+| 1:15 | **B** | "Everything saves to a cloud database, and there are two kinds of accounts. This is Ethan's student login. He only sees his own grades, and he can't change anything." | Switch to the Incognito window: Ethan's report card, full screen, with no roster and no edit buttons |
+| 1:22 | **B** | "If the teacher adds a grade, it shows up on his screen right away." | Back in the teacher window, open Ethan, add `Lab 1`, **Project**, `90`. Switch to Incognito: the new grade and the toast *"Your teacher just updated your grades."* |
 
 ## 1:20 – 2:15 · How we made it
 
@@ -66,4 +69,5 @@
 ### If something goes wrong during recording
 - **Page says "The C++ engine couldn't start":** you opened the file directly. Use the Vercel link, or run `python -m http.server 8000 -d web` and open `http://localhost:8000`.
 - **The demo data looks different:** **⋯ → Load demo class** resets it.
-- **Running long?** Cut the dark-mode moment (1:15) and the `stats` command (2:00) first.
+- **Running long?** Cut the live-update moment (1:22) and the `stats` command (2:00) first.
+- **The Incognito window shows the sign-in screen again:** sign in with the student account you made. If it says the grades aren't available, the demo was reloaded (which makes new codes); copy Ethan's new code and type it in.
