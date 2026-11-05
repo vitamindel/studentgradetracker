@@ -33,7 +33,7 @@ private:
     std::vector<GradeEntry> grades;   // like ArrayList<GradeEntry>
 ```
 
-**The constructor** ([Student.h:25](src/Student.h#L25)) runs automatically when you write `Student s("Ava Chen", 1001, 92);`. It fills in the card:
+**The constructor** ([Student.h:26](src/Student.h#L26)) runs automatically when you write `Student s("Ava Chen", 1001, 92);`. It fills in the card:
 
 ```cpp
 Student(const std::string& name, int id, double startingGrade) {
@@ -45,13 +45,15 @@ Student(const std::string& name, int id, double startingGrade) {
 }
 ```
 
-**The weighted average** ([Student.h:126](src/Student.h#L126)). Think of it as a seesaw where heavier kids count more. A Test is a heavy kid (×2), a Quiz is normal (×1), and Homework is light (×0.5):
+**The weighted average** ([Student.h:149](src/Student.h#L149)) works the same way as our school's grade portal. First, each **category** gets its own average. Then those averages are combined by weight: **Project 50%, Test 20%, and Homework, Quiz, and Class Activity 10% each.** Think of a pizza cut into slices of different sizes. The Project is half the pizza, so it matters most. If a category has no grades yet, its slice is left out and the other slices are stretched to fill the whole pizza:
 
-> average = (score₁ × weight₁ + score₂ × weight₂ + …) ÷ (weight₁ + weight₂ + …)
+> average = (each category's average × its weight, added up) ÷ (the weights of the categories that have grades)
 >
-> Example: Test 80 (×2) and Quiz 100 (×1) → (160 + 100) ÷ 3 = **86.7**
+> Example (Ava, no Project yet): (100 × 10 + 97.5 × 10 + 95.67 × 20 + 100 × 10) ÷ 50 = **97.77**
 
-**The status decision** ([Student.h:172](src/Student.h#L172)) is a plain if / else-if / else chain, like a bouncer checking heights at a ride:
+`categoryTotals()` is a good example of **pass by reference**: it fills in the caller's `sum` and `n` variables through `double& sum, int& n`, something Java can't do with plain numbers.
+
+**The status decision** ([Student.h:193](src/Student.h#L193)) is a plain if / else-if / else chain, like a bouncer checking heights at a ride:
 
 ```cpp
 if (avg >= passCutoff)                  return "Passed";
@@ -61,10 +63,12 @@ else                                    return "Failed";
 
 The cutoffs are *parameters*, so the teacher can move them (Settings on the website, or `thresholds 80 70`).
 
-**"What do I need?"** ([Student.h:205](src/Student.h#L205)) is algebra. We want the new average to equal the target, and we solve for the unknown score `x`:
+**"What do I need?"** ([Student.h:226](src/Student.h#L226)) is algebra. The other categories don't change, so only one category's average moves. If that category has `n` grades adding up to `sum`, one more score `x` makes its average `(sum + x) ÷ (n + 1)`. So we work out the category average we need, then solve for `x`:
 
-> (current weighted sum + w·x) ÷ (current total weight + w) = target
-> → x = (target × (total weight + w) − weighted sum) ÷ w
+> needed category average = (target × (other weights + w) − other weights × their averages) ÷ w
+> → x = needed category average × (n + 1) − sum
+
+Example: Ethan has no Project yet, and a Project is worth 50%, so one good project can rescue him. He needs **86.2%** on it to reach 70%. One Test can't do that: he would need 110%.
 
 If `x` comes out above 100, it's impossible. If it's 0 or less, the student is already safe.
 
@@ -77,11 +81,12 @@ If `x` comes out above 100, it's impossible. If it's 0 or less, the student is a
 A `GradeBook` holds a `std::vector<Student>`, which is a growable list of Student objects (Java: `ArrayList<Student>`). It does everything that needs *more than one* student:
 
 - **Class average, median, standard deviation, pass rate** ([GradeBook.h:316](src/GradeBook.h#L316) and below). The median sorts the averages and picks the middle one. The standard deviation measures "how spread out are the averages?"
+- **Category averages:** `categoryClassAverage()` ([GradeBook.h:368](src/GradeBook.h#L368)) averages one category across the class. That's what the website's *Grading categories* card shows.
 - **Finding a student:** `findById()` ([GradeBook.h:219](src/GradeBook.h#L219)) returns a **pointer** (`Student*`). A pointer is like a Java object reference: it *points at* the real card in the box, so changing it through the pointer changes the original. If nobody has that ID, it returns `nullptr` (C++'s `null`).
-- **Sorting:** `sortBy()` ([GradeBook.h:411](src/GradeBook.h#L411)) is a **selection sort**, the same algorithm from AP CSA Unit 7. Find the student who should come first, swap them to the front, repeat.
-- **Undo:** before *every* change, `saveSnapshot()` ([GradeBook.h:33](src/GradeBook.h#L33)) makes a **photocopy** of the whole box (copying a vector copies every Student inside it). `undo()` ([GradeBook.h:466](src/GradeBook.h#L466)) throws away the current box and puts the newest photocopy back. We keep the last 50 photocopies.
-- **Curve preview:** `curvedCopy()` ([GradeBook.h:439](src/GradeBook.h#L439)) photocopies the class, curves the *copy*, and lets you look at the copy's average. The real class is never touched. That's how the slider shows "77.0 → 81.9" before you press Apply.
-- **CSV import/export** ([GradeBook.h:523](src/GradeBook.h#L523)). Export writes one line per grade (`1001,Ava Chen,Unit 1 Test,Test,94`). Import reads them back, handling `"quoted, names"` with commas in them.
+- **Sorting:** `sortBy()` ([GradeBook.h:426](src/GradeBook.h#L426)) is a **selection sort**, the same algorithm from AP CSA Unit 7. Find the student who should come first, swap them to the front, repeat.
+- **Undo:** before *every* change, `saveSnapshot()` ([GradeBook.h:33](src/GradeBook.h#L33)) makes a **photocopy** of the whole box (copying a vector copies every Student inside it). `undo()` ([GradeBook.h:481](src/GradeBook.h#L481)) throws away the current box and puts the newest photocopy back. We keep the last 50 photocopies.
+- **Curve preview:** `curvedCopy()` ([GradeBook.h:454](src/GradeBook.h#L454)) photocopies the class, curves the *copy*, and lets you look at the copy's average. The real class is never touched. That's how the slider shows "80.7 → 84.7" before you press Apply.
+- **CSV import/export** ([GradeBook.h:541](src/GradeBook.h#L541)). Export writes one line per grade (`1001,Ava Chen,Cybersecurity Analysis,Test,94`). Import reads them back, handling `"quoted, names"` with commas in them.
 
 **Why no `stoi` / `stod`?** Our WebAssembly build has exceptions switched off, to keep the file small. `std::stoi("abc")` would *throw*, and with no exceptions the program would just crash. So we convert text to numbers with a string stream, which only raises a "fail" flag:
 
@@ -101,21 +106,21 @@ The waiter takes an order written as text, like
 grade 1001 "Unit 3 Quiz" quiz 88
 ```
 
-and works out what to do. The key method is `execute(istream& in, ostream& out)` ([CommandShell.h:595](src/CommandShell.h#L595)):
+and works out what to do. The key method is `execute(istream& in, ostream& out)` ([CommandShell.h:633](src/CommandShell.h#L633)):
 
 1. `getline(in, line)` reads one whole line (one order).
 2. `args >> command` reads the first word (`grade`).
-3. A big if / else-if chain ([CommandShell.h:615](src/CommandShell.h#L615)) picks the matching method, `cmdGrade()`.
-4. `cmdGrade()` ([CommandShell.h:143](src/CommandShell.h#L143)) reads the rest with `>>`: the ID, the label, the type, and the score.
+3. A big if / else-if chain ([CommandShell.h:653](src/CommandShell.h#L653)) picks the matching method, `cmdGrade()`.
+4. `cmdGrade()` ([CommandShell.h:146](src/CommandShell.h#L146)) reads the rest with `>>`: the ID, the label, the type, and the score.
 5. It asks the GradeBook to do the work, then writes a reply with `out << "Added Quiz ..."`.
 
 The clever part: `execute()` takes **any** input stream and **any** output stream. In the terminal those are the real `cin` and `cout`. On the website they're `cin` and `cout` *redirected to strings*. Same waiter, same code, two different restaurants.
 
-**Quoted text:** names have spaces, so `"Ava Chen"` goes in quotes. `std::quoted` ([CommandShell.h:52](src/CommandShell.h#L52)) reads a quoted phrase as one piece and strips off the quotes.
+**Quoted text:** names have spaces, so `"Ava Chen"` goes in quotes. `std::quoted` ([CommandShell.h:55](src/CommandShell.h#L55)) reads a quoted phrase as one piece and strips off the quotes.
 
 **Errors always start with `Error:`**, which is how the website knows to show a red toast instead of a green one.
 
-**The `json` command** ([CommandShell.h:511](src/CommandShell.h#L511)) loops over every student and writes the whole class as JSON. JSON is a text format JavaScript can read instantly. After every change, the website asks for `json` and redraws everything from it.
+**The `json` command** ([CommandShell.h:540](src/CommandShell.h#L540)) loops over every student and writes the whole class as JSON. JSON is a text format JavaScript can read instantly. After every change, the website asks for `json` and redraws everything from it.
 
 ---
 
@@ -153,13 +158,13 @@ That's why we can honestly say: **every button on the website sends a command th
 
 This is the OnlineGDB backup, built from the **same three classes**.
 
-- **On startup** ([main.cpp:474](src/main.cpp#L474)) it builds three Student objects with the constructor, prints each one with its status, and calculates their class average. That covers the rubric in the first 20 lines of output.
+- **On startup** ([main.cpp:491](src/main.cpp#L491)) it builds three Student objects with the constructor, prints each one with its status, and calculates their class average. That covers the rubric in the first 20 lines of output.
 - **Then a menu loop** asks for a number 0–12 and calls one function per option.
 - **Safe input** ([main.cpp:90](src/main.cpp#L90)). If you type `abc` where a number is expected, `cin` jams (it enters a "fail" state) and ignores everything after. The fix is three steps:
   1. `cin.fail()`: did that go wrong?
   2. `cin.clear()`: un-jam it.
   3. `cin.ignore(...)`: throw away the rest of the bad line.
-- **Command mode** (option 12, [main.cpp:442](src/main.cpp#L442)) lets you type the exact same commands the website sends, using the same `CommandShell`.
+- **Command mode** (option 12, [main.cpp:459](src/main.cpp#L459)) lets you type the exact same commands the website sends, using the same `CommandShell`.
 - **Colors** use ANSI codes like `\033[32m` (green). Set `FANCY_UI = false` to turn them off.
 
 ---
@@ -176,7 +181,7 @@ You open Ethan's panel, type **"Unit 3 Retest"**, choose **Test**, enter **95**,
       grade 1006 "Unit 3 Retest" test 95
    │
    ▼
- 2. cpp() logs it to the console panel, calls engine.run()      web/app.js:67
+ 2. cpp() logs it to the console panel, calls engine.run()      web/app.js:70
    │
    ▼
  3. engine.js copies the text into WebAssembly memory           web/engine.js:97
@@ -187,7 +192,7 @@ You open Ethan's panel, type **"Unit 3 Retest"**, choose **Test**, enter **95**,
  4. run() points cin at the text, cout at an empty string       src/web_main.cpp:40
    │
    ▼
- 5. CommandShell::execute(cin, cout)                            src/CommandShell.h:595
+ 5. CommandShell::execute(cin, cout)                            src/CommandShell.h:633
       getline(cin, line)   →  "grade 1006 "Unit 3 Retest" test 95"
       args >> command      →  "grade"   →  cmdGrade()
       readInt → 1006, std::quoted → Unit 3 Retest, "test", 95
@@ -203,7 +208,7 @@ You open Ethan's panel, type **"Unit 3 Retest"**, choose **Test**, enter **95**,
       grades.push_back(...)
    │
    ▼
- 8. cout << "Added Test "Unit 3 Retest" (95.0) for Ethan Brooks. New average: 60.2%."
+ 8. cout << "Added Test "Unit 3 Retest" (95.0) for Ethan Brooks. New average: 58.5%."
    │
    ═════════════════  back out to JavaScript  ═════════════════
    ▼

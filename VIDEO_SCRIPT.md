@@ -18,7 +18,7 @@
 |---|---|---|---|
 | 0:00 | **A** | "Hi, I'm [Your Name]…" | Website dashboard, whole page visible |
 | 0:03 | **B** | "…and I'm [Partner Name]. This is Gradebook++, a student grade tracker we built in C++." | Slowly move the mouse across the stat cards |
-| 0:08 | **A** | "Teachers deal with tons of grades, and a test should count more than homework. Our app does the weighted math instantly, shows who's passing and who needs help, and tells a student exactly what they need on their next test." | Point at *Class average*, then the *Status breakdown*, then the red **At risk** badge on Ethan |
+| 0:08 | **A** | "Teachers deal with tons of grades, and in our Electronics class a Project is worth half the grade. Our app does the weighted math the same way our school portal does, shows who's passing and who needs help, and tells a student exactly what they need next." | Point at *Class average*, then the *Status breakdown*, then the red **At risk** badge on Ethan, then scroll to the *Grading categories* card |
 
 ## 0:20 – 1:20 · Live demo
 
@@ -27,8 +27,8 @@
 | 0:20 | **B** | "Let's add a student. This calls our C++ constructor with a name and a starting grade." | Click **Student** → type `Jordan Lee`, grade `84` → **Add student**. Green toast appears. |
 | 0:28 | **B** | "Every number updates: the average, the charts, the roster." | Point at the new row and the new bar in *Student averages* |
 | 0:33 | **A** | "Click a student to see their history. Here's Ethan. He's failing, and the chart shows every grade plus his running average." | Click **Ethan Brooks** → the panel slides in. Hover the line chart so the tooltip shows. |
-| 0:42 | **A** | "Ethan wants to know what he needs on the next test to reach 60 percent…" | In *What do I need?* choose **Test**, type `60`, click **Calculate** |
-| 0:47 | **A** | "…93.8. That answer came straight from C++." | Result box: *"Ethan Brooks needs 93.8%…"* |
+| 0:42 | **A** | "Ethan has no project grade yet. What does he need on it to reach 70 percent?" | Scroll the panel down to *What do I need?*, leave **Project** selected, type `70`, click **Calculate** |
+| 0:47 | **A** | "…86.2. The project is half our grade, so it can still save him. That answer came straight from C++." | Result box: *"Ethan Brooks needs 86.2%…"* |
 | 0:51 | **B** | "Now a whole-class assignment: one score per student." | Press Esc. Click **Assignment** → title `Pop Quiz`, type in `85` + **Fill blanks** → **Add assignment** |
 | 0:59 | **B** | "And a curve. The slider previews the new average before anything changes. C++ works that out on a copy of the class." | Click **Curve**, drag to **+6**, pause on the before → after numbers, click **Apply curve** |
 | 1:07 | **A** | "Watch the bars slide. And if we change our minds…" | Bars animate. Then press **Ctrl+Z**. |
@@ -42,7 +42,7 @@
 | 1:20 | **A** | "Here's the cool part. There's no grade math in the JavaScript at all. Open the C++ Console." | Click **C++ Console** at the bottom. The log is visible. |
 | 1:26 | **A** | "Every button sends a text command, like this one. Watch." | With the console still open, click **Student** → `Maya Ortiz`, `91` → **Add student**. Point at the new `add "Maya Ortiz" 91` line in the console and C++'s reply under it: *"Added Maya Ortiz (ID …) with a starting grade of 91.0."* (Don't open a student panel here: its dark backdrop dims the console.) |
 | 1:34 | **B** | "That command goes into one C++ function called `run`. Inside, we point `cin` at the command and `cout` at an empty string. Our `CommandShell` class reads it with `cin`, updates the `Student` objects, and answers with `cout`." | Switch to the `web_main.cpp` tab. Highlight the two `rdbuf` lines, then `shell.execute(std::cin, std::cout)`. |
-| 1:48 | **A** | "We have three classes. `Student` has private name, ID, and grades, plus methods like `average` and `status`. `GradeBook` holds everyone and does class stats, sorting, and undo. `CommandShell` turns text into method calls." | Quickly show `Student.h` (the constructor at line 25), then `GradeBook.h` |
+| 1:48 | **A** | "We have three classes. `Student` has private name, ID, and grades, plus methods like `average` and `status`. `GradeBook` holds everyone and does class stats, sorting, and undo. `CommandShell` turns text into method calls." | Quickly show `Student.h` (the constructor at line 26), then `GradeBook.h` |
 | 2:00 | **B** | "To run C++ in a browser, we compiled it to WebAssembly with zig. And the same classes also run as a normal terminal program, with a `cin`/`cout` menu, as a backup." | Back in the browser console, type `stats` + Enter, so C++ prints ASCII bar charts. (Or show OnlineGDB running for 2 seconds.) |
 
 ## 2:15 – 2:40 · Debugging story

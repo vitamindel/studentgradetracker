@@ -15,8 +15,8 @@
 
 // One grade in a student's history (a struct is a class with public members).
 struct GradeEntry {
-    std::string label;  // e.g. "Unit 2 Test"
-    std::string type;   // Test, Project, Quiz, or Homework
+    std::string label;  // e.g. "C++ Unit 1"
+    std::string type;   // a category: Homework, Quiz, Test, Project, Class Activity
     double score;       // 0 to 120 (over 100 = extra credit)
 };
 
@@ -28,38 +28,47 @@ private:
 
 public:
     static const int NO_GRADE = -1;   // "start with no grades"
+    static const int NUM_TYPES = 5;
 
     // Parameterized constructor: Student s("Ava Chen", 1001, 92);
     Student(const std::string& name, int id, double startingGrade) {
         this->name = name;
         this->id = id;
 
-        // The starting grade counts as a Quiz (normal 1x weight).
+        // The starting grade is recorded as a Quiz.
         if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
             grades.push_back({"Starting Grade", "Quiz", startingGrade});
         }
     }
 
-    // Turns "test", "T", "hw", ... into an official type name, or "" if invalid.
+    // The grading categories, in the same order as the school portal.
+    static std::string typeName(int index) {
+        std::string names[NUM_TYPES] = {"Homework", "Quiz", "Test", "Project", "Class Activity"};
+        return names[index];
+    }
+
+    // Turns "test", "T", "hw", "activity", ... into a category name, or "" if invalid.
     static std::string normalizeType(const std::string& raw) {
         std::string t = "";
         for (char c : raw) {
             t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
-        if (t == "test" || t == "t" || t == "exam")              return "Test";
-        if (t == "project" || t == "p" || t == "proj" || t == "lab") return "Project";
-        if (t == "quiz" || t == "q")                             return "Quiz";
-        if (t == "homework" || t == "h" || t == "hw")            return "Homework";
+        if (t == "homework" || t == "h" || t == "hw")                    return "Homework";
+        if (t == "quiz" || t == "q" || t == "quizzes")                   return "Quiz";
+        if (t == "test" || t == "t" || t == "tests" || t == "exam")      return "Test";
+        if (t == "project" || t == "p" || t == "proj" || t == "lab")     return "Project";
+        if (t == "class activity" || t == "activity" || t == "ca" || t == "classwork") return "Class Activity";
         return "";
     }
 
-    // How much each type counts toward the average.
+    // Each category's share of the final grade, in percent (they add up to 100).
     static double typeWeight(const std::string& type) {
-        if (type == "Test")     return 2.0;
-        if (type == "Project")  return 1.5;
-        if (type == "Quiz")     return 1.0;
-        if (type == "Homework") return 0.5;
-        return 0.0;
+        if (type == "Homework")       return 10;
+        if (type == "Quiz")           return 10;
+        if (type == "Test")           return 20;
+        if (type == "Project")        return 50;
+        if (type == "Class Activity") return 10;
+        return 0;
     }
 
     static bool isValidScore(double score) {
@@ -119,40 +128,52 @@ public:
         }
     }
 
+    // Sum and count of one category's scores among the first "count" grades.
     // Pass by reference (&): the answers go straight into the caller's variables.
-    void weightedTotals(double& weightedSum, double& totalWeight) const {
-        weightedSum = 0;
-        totalWeight = 0;
-        for (const GradeEntry& g : grades) {
-            double w = typeWeight(g.type);
-            weightedSum += g.score * w;
-            totalWeight += w;
+    void categoryTotals(const std::string& type, int count, double& sum, int& n) const {
+        sum = 0;
+        n = 0;
+        for (int i = 0; i < count && i < gradeCount(); i++) {
+            if (grades[i].type == type) {
+                sum += grades[i].score;
+                n++;
+            }
         }
     }
 
-    // Weighted average = sum(score x weight) / sum(weights)
-    double average() const {
-        double weightedSum, totalWeight;
-        weightedTotals(weightedSum, totalWeight);
-        if (totalWeight == 0) {
-            return 0;
+    // Average of one category, or -1 if it has no grades yet.
+    double categoryAverage(const std::string& type) const {
+        double sum;
+        int n;
+        categoryTotals(type, gradeCount(), sum, n);
+        if (n == 0) {
+            return -1;
         }
-        return weightedSum / totalWeight;
+        return sum / n;
     }
 
-    // Average using only the first "count" grades (for the running-average line).
+    // Weighted average of the first "count" grades: each category's average times its
+    // weight, divided by the weights used. Empty categories are skipped.
     double averageOfFirst(int count) const {
         double weightedSum = 0;
         double totalWeight = 0;
-        for (int i = 0; i < count && i < gradeCount(); i++) {
-            double w = typeWeight(grades[i].type);
-            weightedSum += grades[i].score * w;
-            totalWeight += w;
+        for (int t = 0; t < NUM_TYPES; t++) {
+            double sum;
+            int n;
+            categoryTotals(typeName(t), count, sum, n);
+            if (n > 0) {
+                weightedSum += typeWeight(typeName(t)) * (sum / n);
+                totalWeight += typeWeight(typeName(t));
+            }
         }
         if (totalWeight == 0) {
             return 0;
         }
         return weightedSum / totalWeight;
+    }
+
+    double average() const {
+        return averageOfFirst(gradeCount());
     }
 
     static std::string letterFor(double percent) {
@@ -208,16 +229,30 @@ public:
         return "steady";
     }
 
-    // Score needed on the next assignment to reach "target":
-    //   x = (target * (totalWeight + w) - weightedSum) / w
+    // Score needed on the next assignment of this type to reach "target".
+    // The other categories stay the same; this one's average becomes (sum + x) / (n + 1).
     double scoreNeeded(const std::string& rawType, double target) const {
-        double w = typeWeight(normalizeType(rawType));
-        if (w == 0) {
+        std::string type = normalizeType(rawType);
+        if (type == "") {
             return -1;
         }
-        double weightedSum, totalWeight;
-        weightedTotals(weightedSum, totalWeight);
-        return (target * (totalWeight + w) - weightedSum) / w;
+        double otherSum = 0;      // weight x average of the other graded categories
+        double otherWeight = 0;
+        for (int t = 0; t < NUM_TYPES; t++) {
+            double avg = categoryAverage(typeName(t));
+            if (typeName(t) != type && avg >= 0) {
+                otherSum += typeWeight(typeName(t)) * avg;
+                otherWeight += typeWeight(typeName(t));
+            }
+        }
+        double w = typeWeight(type);
+        double sum;
+        int n;
+        categoryTotals(type, gradeCount(), sum, n);
+
+        // Solve (otherSum + w * newCategoryAverage) / (otherWeight + w) = target
+        double newCategoryAverage = (target * (otherWeight + w) - otherSum) / w;
+        return newCategoryAverage * (n + 1) - sum;
     }
 
     double highestScore() const {
@@ -604,6 +639,21 @@ public:
         return worst;
     }
 
+    // Class average for one category (students with no grades in it are skipped), or -1.
+    double categoryClassAverage(const std::string& type) const {
+        double sum = 0;
+        int count = 0;
+        for (const Student& s : students) {
+            double avg = s.categoryAverage(type);
+            if (avg >= 0) {
+                sum += avg;
+                count++;
+            }
+        }
+        if (count == 0) return -1;
+        return sum / count;
+    }
+
     int countLetter(const std::string& letter) const {
         int count = 0;
         for (const Student& s : students) {
@@ -726,28 +776,31 @@ public:
         saveSnapshot("load demo");
         students.clear();
         nextId = 1001;
-        className = "Period 3 - Chemistry";
+        className = "Electronics/Computer Engineering 11";
 
-        const int NUM_ASSIGNMENTS = 7;
+        // Marking Period 1 so far (no Project yet, so that category is skipped).
+        const int NUM_ASSIGNMENTS = 9;
         std::string labels[NUM_ASSIGNMENTS] = {
-            "Homework 1", "Quiz 1: Atoms", "Unit 1 Test", "Lab Project",
-            "Quiz 2: Bonding", "Homework 2", "Unit 2 Test"};
+            "Security Findings", "Next Level Cyber", "Intro to Cybersecurity",
+            "Cryptography", "Cybersecurity Analysis", "Cybersecurity - AWS",
+            "Elec Symbols & Design", "C++ Beginners", "C++ Unit 1"};
         std::string types[NUM_ASSIGNMENTS] = {
-            "Homework", "Quiz", "Test", "Project", "Quiz", "Homework", "Test"};
+            "Class Activity", "Homework", "Quiz", "Homework", "Test", "Test",
+            "Quiz", "Class Activity", "Test"};
 
         const int NUM_STUDENTS = 8;
         std::string names[NUM_STUDENTS] = {
             "Ava Chen", "Marcus Johnson", "Priya Patel", "Diego Ramirez",
             "Sofia Rossi", "Ethan Brooks", "Hana Kim", "Liam O'Connor"};
         double scores[NUM_STUDENTS][NUM_ASSIGNMENTS] = {   // 2D array, like double[][] in Java
-            {95, 92, 94, 98, 96, 100, 97},
-            {78, 72, 70, 80, 75, 85, 74},
-            {88, 85, 90, 92, 89, 95, 91},
-            {60, 55, 58, 65, 62, 70, 66},
-            {82, 79, 84, 88, 86, 90, 85},
-            {50, 48, 52, 60, 45, 65, 49},
-            {70, 74, 76, 80, 82, 88, 85},
-            {92, 85, 80, 78, 75, 70, 68}};
+            {100, 100, 95, 100, 94, 96, 100, 100, 97},
+            {100, 80, 75, 70, 72, 68, 80, 100, 66},
+            {100, 100, 90, 100, 88, 91, 90, 100, 95},
+            {80, 60, 65, 70, 62, 58, 70, 80, 70},
+            {100, 90, 85, 90, 84, 82, 90, 100, 90},
+            {60, 50, 55, 40, 52, 48, 60, 80, 45},
+            {80, 70, 70, 80, 72, 78, 85, 100, 88},
+            {100, 100, 90, 90, 85, 78, 75, 80, 66}};
 
         for (int s = 0; s < NUM_STUDENTS; s++) {
             Student student(names[s], nextId, Student::NO_GRADE);
@@ -852,6 +905,9 @@ public:
 class CommandShell {
 private:
     GradeBook& book;   // a reference: the real gradebook, not a copy
+
+    static constexpr const char* TYPE_ERROR =
+        "Error: type must be homework, quiz, test, project, or activity.\n";
 
     // fmt(92.456, 1) -> "92.5"
     static std::string fmt(double value, int decimals) {
@@ -990,7 +1046,7 @@ private:
         Student* s = requireStudent(id, out);
         if (s == nullptr) return;
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (!Student::isValidScore(score)) {
@@ -1013,7 +1069,7 @@ private:
             return;
         }
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         std::vector<int> ids;
@@ -1074,7 +1130,7 @@ private:
         if (readText(args, word)) label = word;
         if (readText(args, word)) type = word;
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (!book.editGrade(id, number - 1, score, label, type)) {
@@ -1151,12 +1207,19 @@ private:
             return;
         }
         out << std::left << "  " << std::setw(4) << "#" << std::setw(24) << "Assignment"
-            << std::setw(10) << "Type" << std::right << std::setw(6) << "Score" << "\n";
+            << std::setw(16) << "Category" << std::right << std::setw(6) << "Score" << "\n";
         int number = 1;
         for (const GradeEntry& g : s->getGrades()) {
             out << std::left << "  " << std::setw(4) << number << std::setw(24) << g.label
-                << std::setw(10) << g.type << std::right << std::setw(6) << fmt(g.score, 1) << "\n";
+                << std::setw(16) << g.type << std::right << std::setw(6) << fmt(g.score, 1) << "\n";
             number++;
+        }
+        out << std::left << "  " << std::setw(18) << "Category" << std::setw(8) << "Weight" << "Average\n";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = s->categoryAverage(type);
+            out << "  " << std::setw(18) << type << std::setw(8) << (fmt(Student::typeWeight(type), 0) + "%")
+                << (avg >= 0 ? fmt(avg, 1) : "--") << "\n";
         }
         out << "Weighted average: " << fmt(s->average(), 1) << "%   Letter: " << s->letterGrade()
             << "   GPA: " << fmt(s->gpa(), 1) << "\n";
@@ -1178,7 +1241,7 @@ private:
         if (s == nullptr) return;
         std::string niceType = Student::normalizeType(type);
         if (niceType == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (target <= 0 || target > 100) {
@@ -1265,6 +1328,13 @@ private:
         out << "Passed: " << book.countStatus("Passed")
             << "   Needs Improvement: " << book.countStatus("Needs Improvement")
             << "   Failed: " << book.countStatus("Failed") << "\n";
+        out << "Category averages:\n";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = book.categoryClassAverage(type);
+            out << "  " << std::left << std::setw(16) << type << std::right << std::setw(4)
+                << fmt(Student::typeWeight(type), 0) << "%   " << (avg >= 0 ? fmt(avg, 1) : "no grades") << "\n";
+        }
         out << "Letter grades:\n";
         std::string letters[5] = {"A", "B", "C", "D", "F"};
         for (int i = 0; i < 5; i++) {
@@ -1345,6 +1415,18 @@ private:
         out << ".\n";
     }
 
+    // {"Homework":95.00,...,"Project":null} for one student, or the class if s is nullptr
+    void jsonCategories(std::ostream& out, const Student* s) {
+        out << "{";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = (s == nullptr) ? book.categoryClassAverage(type) : s->categoryAverage(type);
+            if (t > 0) out << ",";
+            out << jsonString(type) << ":" << (avg >= 0 ? fmt(avg, 2) : "null");
+        }
+        out << "}";
+    }
+
     // json -> the WHOLE gradebook as JSON, so the website can draw it
     void cmdJson(std::ostream& out) {
         out << "{";
@@ -1353,7 +1435,12 @@ private:
         out << ",\"needsCutoff\":" << fmt(book.getNeedsCutoff(), 2);
         out << ",\"canUndo\":" << (book.canUndo() ? "true" : "false");
         out << ",\"undoLabel\":" << jsonString(book.undoDescription());
-        out << ",\"weights\":{\"Test\":2,\"Project\":1.5,\"Quiz\":1,\"Homework\":0.5}";
+        out << ",\"weights\":{";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            if (t > 0) out << ",";
+            out << jsonString(Student::typeName(t)) << ":" << fmt(Student::typeWeight(Student::typeName(t)), 0);
+        }
+        out << "}";
 
         out << ",\"stats\":{";
         out << "\"count\":" << book.size();
@@ -1375,6 +1462,8 @@ private:
             << ",\"F\":" << book.countLetter("F") << "}";
         out << ",\"topId\":" << book.topStudentId();
         out << ",\"riskId\":" << book.atRiskStudentId();
+        out << ",\"categories\":";
+        jsonCategories(out, nullptr);
         out << "}";
 
         out << ",\"students\":[";
@@ -1392,6 +1481,8 @@ private:
             out << ",\"trend\":" << jsonString(s.trend());
             out << ",\"highest\":" << fmt(s.highestScore(), 2);
             out << ",\"lowest\":" << fmt(s.lowestScore(), 2);
+            out << ",\"categories\":";
+            jsonCategories(out, &s);
             out << ",\"grades\":[";
             for (int i = 0; i < s.gradeCount(); i++) {
                 const GradeEntry& g = s.getGrades()[i];
@@ -1408,7 +1499,7 @@ private:
     void cmdHelp(std::ostream& out) {
         out << "Commands (text with spaces goes in \"quotes\"):\n"
             << "  add \"<name>\" [grade]                 add a student\n"
-            << "  grade <id> \"<label>\" <type> <score>  add a grade (test/quiz/project/homework)\n"
+            << "  grade <id> \"<label>\" <type> <score>  add a grade (homework/quiz/test/project/activity)\n"
             << "  assign \"<title>\" <type> <id>=<score> ...  grade the whole class at once\n"
             << "  edit <id> <#> <score> [\"<label>\"] [type]  change grade number #\n"
             << "  delgrade <id> <#>                    delete grade number #\n"
@@ -1639,7 +1730,7 @@ string readType(const string& prompt) {
         if (type != "") {
             return type;
         }
-        cout << paint("  Type must be test, quiz, project, or homework.\n", RED);
+        cout << paint("  Type must be homework, quiz, test, project, or activity.\n", RED);
     }
 }
 
@@ -1729,7 +1820,7 @@ void addGradeMenu(GradeBook& book) {
     if (id == 0) return;
     string label = readLine("  Assignment name: ");
     if (label.empty()) label = "Untitled";
-    string type = readType("  Type (test/quiz/project/homework): ");
+    string type = readType("  Category (homework/quiz/test/project/activity): ");
     double score = readDouble("  Score (0-120): ", 0, 120);
     book.addGrade(id, label, type, score);
     const Student* s = book.findById(id);
@@ -1745,7 +1836,7 @@ void classAssignmentMenu(GradeBook& book) {
     }
     string title = readLine("  Assignment title: ");
     if (title.empty()) title = "Untitled";
-    string type = readType("  Type (test/quiz/project/homework): ");
+    string type = readType("  Category (homework/quiz/test/project/activity): ");
     cout << paint("  Enter a score for each student (press Enter to skip someone).\n", DIM);
 
     vector<int> ids;
@@ -1788,12 +1879,21 @@ void reportCardMenu(GradeBook& book) {
         cout << "  No grades yet.\n";
         return;
     }
-    cout << paint("  #   Assignment              Type       Score  Weight", DIM) << "\n";
+    cout << paint("  #   Assignment              Category         Score", DIM) << "\n";
     int number = 1;
     for (const GradeEntry& g : s->getGrades()) {
-        cout << "  " << left << setw(4) << number << setw(24) << g.label << setw(9) << g.type << right
-             << setw(7) << g.score << "  x" << Student::typeWeight(g.type) << "\n";
+        cout << "  " << left << setw(4) << number << setw(24) << g.label << setw(15) << g.type << right
+             << setw(7) << g.score << "\n";
         number++;
+    }
+
+    // Like the "Grading Information" table on the school portal
+    cout << "\n" << paint("  Category          Weight   Average", DIM) << "\n";
+    for (int t = 0; t < Student::NUM_TYPES; t++) {
+        string type = Student::typeName(t);
+        double avg = s->categoryAverage(type);
+        cout << "  " << left << setw(18) << type << right << setw(5) << static_cast<int>(Student::typeWeight(type))
+             << "%" << setw(10) << (avg >= 0 ? oneDecimal(avg) : "--") << "\n";
     }
     string status = book.statusOf(*s);
     cout << "\n  Weighted average: " << paint(oneDecimal(s->average()) + "%", BOLD)
@@ -1816,6 +1916,14 @@ void statsMenu(const GradeBook& book) {
     cout << "  " << paint("Passed " + to_string(book.countStatus("Passed")), GREEN)
          << "    " << paint("Needs Improvement " + to_string(book.countStatus("Needs Improvement")), YELLOW)
          << "    " << paint("Failed " + to_string(book.countStatus("Failed")), RED) << "\n";
+
+    cout << "\n  " << paint("Category averages", BOLD) << "\n";
+    for (int t = 0; t < Student::NUM_TYPES; t++) {
+        string type = Student::typeName(t);
+        double avg = book.categoryClassAverage(type);
+        cout << "  " << left << setw(16) << type << right << setw(3) << static_cast<int>(Student::typeWeight(type))
+             << "%   " << (avg >= 0 ? oneDecimal(avg) : paint("no grades yet", DIM)) << "\n";
+    }
 
     // Chart 1: each student's average (1 '#' = 2.5 points)
     cout << "\n  " << paint("Student averages", BOLD)
@@ -1853,7 +1961,7 @@ void whatDoINeedMenu(GradeBook& book) {
     printHeader("What Do I Need?");
     int id = readStudentId(book);
     if (id == 0) return;
-    string type = readType("  Next assignment type (test/quiz/project/homework): ");
+    string type = readType("  Next assignment category (homework/quiz/test/project/activity): ");
     double target = readDouble("  Target average (%): ", 1, 100);
     const Student* s = book.findById(id);
     double needed = s->scoreNeeded(type, target);
@@ -1960,16 +2068,16 @@ int main() {
     cout << fixed << setprecision(1);   // 1 decimal place everywhere
 
     cout << "\n" << paint("  ===  STUDENT GRADE TRACKER  ===", BOLD + ";" + CYAN) << "\n";
-    cout << paint("  Weights: Test x2, Project x1.5, Quiz x1, Homework x0.5", DIM) << "\n";
+    cout << paint("  Weights: Homework 10%, Quiz 10%, Test 20%, Project 50%, Class Activity 10%", DIM) << "\n";
 
     // 3 Student objects made with the parameterized constructor (name, ID, starting grade)
     Student student1("Ava Chen", 1001, 92.5);
     Student student2("Marcus Johnson", 1002, 72.0);
     Student student3("Ethan Brooks", 1003, 55.0);
 
-    student1.addGrade("Unit 1 Test", "Test", 95);
-    student2.addGrade("Unit 1 Test", "Test", 62);
-    student3.addGrade("Unit 1 Test", "Test", 50);
+    student1.addGrade("C++ Unit 1", "Test", 95);
+    student2.addGrade("C++ Unit 1", "Test", 62);
+    student3.addGrade("C++ Unit 1", "Test", 50);
 
     double passCutoff = 70;
     double needsCutoff = 60;
@@ -1984,7 +2092,7 @@ int main() {
 
     // Move the 3 objects into a GradeBook for the menu.
     GradeBook book;
-    book.setClassName("Period 3 - Chemistry");
+    book.setClassName("Electronics/Computer Engineering 11");
     book.addExistingStudent(student1);
     book.addExistingStudent(student2);
     book.addExistingStudent(student3);

@@ -2,7 +2,7 @@
 // command to C++ with cpp("..."), then the page is redrawn from C++'s "json".
 import { loadEngine, quote } from "./engine.js";
 
-const STORAGE_KEY = "gradebookpp:v1";
+const STORAGE_KEY = "gradebookpp:v2";
 const THEME_KEY = "gradebookpp:theme";
 const PREFS_KEY = "gradebookpp:prefs";
 
@@ -52,6 +52,9 @@ function initials(name) {
 function studentById(id) {
   return state ? state.students.find((s) => s.id === id) : undefined;
 }
+
+// "Class Activity" -> "activity", "Test" -> "test" (words C++'s normalizeType accepts)
+const typeArg = (type) => type.split(" ").pop().toLowerCase();
 
 function storageGet(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; }
@@ -169,10 +172,12 @@ function savePrefs() {
 
 // ----- RENDERING -----
 function render() {
+  fillTypeSelects();
   renderHeader();
   renderTiles();
   renderStatus();
   renderLetters();
+  renderCategories();
   renderAverages();
   renderRoster();
   if (ui.selectedId !== null) renderDrawer();
@@ -287,6 +292,39 @@ function renderLetters() {
     col.dataset.tipLabel = `Letter ${letter}${graded ? ` · ${fmt((count / graded) * 100, 0)}% of class` : ""}`;
   });
   chart.setAttribute("aria-label", "Letter grades: " + letters.map((l, i) => `${l} ${counts[i]}`).join(", "));
+}
+
+// The category dropdowns are built from C++'s weights, so both always agree.
+function fillTypeSelects() {
+  for (const select of $$(".type-select")) {
+    if (select.options.length) continue;
+    select.innerHTML = Object.entries(state.weights).map(([type, weight]) =>
+      `<option value="${typeArg(type)}"${typeArg(type) === select.dataset.default ? " selected" : ""}>` +
+      `${escapeHtml(type)}${"plain" in select.dataset ? "" : ` · ${weight}%`}</option>`).join("");
+  }
+}
+
+// One tile per grading category: its weight and the class average from C++.
+function renderCategories() {
+  const grid = $("#cat-grid");
+  const types = Object.keys(state.weights);
+  if (grid.children.length !== types.length) {
+    grid.innerHTML = types.map(() => `
+      <div class="cat" tabindex="0"><p class="cat-name"></p><p class="cat-weight"></p><p class="cat-avg"></p>
+        <div class="meter" aria-hidden="true"><span></span></div></div>`).join("");
+  }
+  types.forEach((type, i) => {
+    const tile = grid.children[i];
+    const weight = state.weights[type];
+    const avg = state.stats.categories[type];
+    tile.classList.toggle("no-grades", avg === null);
+    tile.querySelector(".cat-name").textContent = type;
+    tile.querySelector(".cat-weight").innerHTML = `${weight}<span class="unit">%</span>`;
+    tile.querySelector(".cat-avg").innerHTML = avg === null ? "No grades yet" : `Class avg <strong>${fmt(avg)}%</strong>`;
+    tile.querySelector(".meter span").style.width = `${avg === null ? 0 : Math.min(avg, 100)}%`;
+    tile.dataset.tipValue = avg === null ? "No grades yet" : `${fmt(avg)}% class average`;
+    tile.dataset.tipLabel = `${type} · ${weight}% of the final grade`;
+  });
 }
 
 // Horizontal bars, one per student. Rows are reused between renders so
@@ -482,11 +520,17 @@ function renderDrawer() {
   $("#d-status").innerHTML = chipHtml(s.status);
   $("#d-count").textContent = `(${s.grades.length})`;
 
+  $("#d-cats").innerHTML = Object.entries(state.weights).map(([type, weight]) => {
+    const avg = s.categories[type];
+    return `<tr class="${avg === null ? "no-grades" : ""}"><td>${escapeHtml(type)}</td><td class="num">${weight}%</td>
+      <td class="num">${avg === null ? "–" : fmt(avg) + "%"}</td></tr>`;
+  }).join("");
+
   $("#d-grades").innerHTML = s.grades.length
     ? s.grades.map((g, i) => `<li>
         <span class="g-num">#${i + 1}</span>
         <span class="g-main"><span class="g-label">${escapeHtml(g.label)}</span>
-          <span class="g-type">${escapeHtml(g.type)} · ×${state.weights[g.type]}</span></span>
+          <span class="g-type">${escapeHtml(g.type)}</span></span>
         <span class="g-score">${fmt(g.score)}</span>
         <span class="g-actions">
           <button class="btn btn-ghost btn-icon" type="button" data-edit="${i + 1}" aria-label="Edit grade ${i + 1}">${icon("i-pencil", "icon icon-sm")}</button>
@@ -602,7 +646,7 @@ $("#d-grades").addEventListener("click", (e) => {
     const g = studentById(ui.selectedId).grades[n - 1];
     $("#edit-title").textContent = `Edit grade #${n}`;
     $("#edit-label").value = g.label;
-    $("#edit-type").value = g.type.toLowerCase();
+    $("#edit-type").value = typeArg(g.type);
     $("#edit-score").value = g.score;
     $("#form-edit").dataset.n = n;
     $("#dlg-edit").showModal();

@@ -15,6 +15,9 @@ class CommandShell {
 private:
     GradeBook& book;   // a reference: the real gradebook, not a copy
 
+    static constexpr const char* TYPE_ERROR =
+        "Error: type must be homework, quiz, test, project, or activity.\n";
+
     // fmt(92.456, 1) -> "92.5"
     static std::string fmt(double value, int decimals) {
         std::ostringstream out;
@@ -152,7 +155,7 @@ private:
         Student* s = requireStudent(id, out);
         if (s == nullptr) return;
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (!Student::isValidScore(score)) {
@@ -175,7 +178,7 @@ private:
             return;
         }
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         std::vector<int> ids;
@@ -236,7 +239,7 @@ private:
         if (readText(args, word)) label = word;
         if (readText(args, word)) type = word;
         if (Student::normalizeType(type) == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (!book.editGrade(id, number - 1, score, label, type)) {
@@ -313,12 +316,19 @@ private:
             return;
         }
         out << std::left << "  " << std::setw(4) << "#" << std::setw(24) << "Assignment"
-            << std::setw(10) << "Type" << std::right << std::setw(6) << "Score" << "\n";
+            << std::setw(16) << "Category" << std::right << std::setw(6) << "Score" << "\n";
         int number = 1;
         for (const GradeEntry& g : s->getGrades()) {
             out << std::left << "  " << std::setw(4) << number << std::setw(24) << g.label
-                << std::setw(10) << g.type << std::right << std::setw(6) << fmt(g.score, 1) << "\n";
+                << std::setw(16) << g.type << std::right << std::setw(6) << fmt(g.score, 1) << "\n";
             number++;
+        }
+        out << std::left << "  " << std::setw(18) << "Category" << std::setw(8) << "Weight" << "Average\n";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = s->categoryAverage(type);
+            out << "  " << std::setw(18) << type << std::setw(8) << (fmt(Student::typeWeight(type), 0) + "%")
+                << (avg >= 0 ? fmt(avg, 1) : "--") << "\n";
         }
         out << "Weighted average: " << fmt(s->average(), 1) << "%   Letter: " << s->letterGrade()
             << "   GPA: " << fmt(s->gpa(), 1) << "\n";
@@ -340,7 +350,7 @@ private:
         if (s == nullptr) return;
         std::string niceType = Student::normalizeType(type);
         if (niceType == "") {
-            out << "Error: type must be test, quiz, project, or homework.\n";
+            out << TYPE_ERROR;
             return;
         }
         if (target <= 0 || target > 100) {
@@ -427,6 +437,13 @@ private:
         out << "Passed: " << book.countStatus("Passed")
             << "   Needs Improvement: " << book.countStatus("Needs Improvement")
             << "   Failed: " << book.countStatus("Failed") << "\n";
+        out << "Category averages:\n";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = book.categoryClassAverage(type);
+            out << "  " << std::left << std::setw(16) << type << std::right << std::setw(4)
+                << fmt(Student::typeWeight(type), 0) << "%   " << (avg >= 0 ? fmt(avg, 1) : "no grades") << "\n";
+        }
         out << "Letter grades:\n";
         std::string letters[5] = {"A", "B", "C", "D", "F"};
         for (int i = 0; i < 5; i++) {
@@ -507,6 +524,18 @@ private:
         out << ".\n";
     }
 
+    // {"Homework":95.00,...,"Project":null} for one student, or the class if s is nullptr
+    void jsonCategories(std::ostream& out, const Student* s) {
+        out << "{";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            std::string type = Student::typeName(t);
+            double avg = (s == nullptr) ? book.categoryClassAverage(type) : s->categoryAverage(type);
+            if (t > 0) out << ",";
+            out << jsonString(type) << ":" << (avg >= 0 ? fmt(avg, 2) : "null");
+        }
+        out << "}";
+    }
+
     // json -> the WHOLE gradebook as JSON, so the website can draw it
     void cmdJson(std::ostream& out) {
         out << "{";
@@ -515,7 +544,12 @@ private:
         out << ",\"needsCutoff\":" << fmt(book.getNeedsCutoff(), 2);
         out << ",\"canUndo\":" << (book.canUndo() ? "true" : "false");
         out << ",\"undoLabel\":" << jsonString(book.undoDescription());
-        out << ",\"weights\":{\"Test\":2,\"Project\":1.5,\"Quiz\":1,\"Homework\":0.5}";
+        out << ",\"weights\":{";
+        for (int t = 0; t < Student::NUM_TYPES; t++) {
+            if (t > 0) out << ",";
+            out << jsonString(Student::typeName(t)) << ":" << fmt(Student::typeWeight(Student::typeName(t)), 0);
+        }
+        out << "}";
 
         out << ",\"stats\":{";
         out << "\"count\":" << book.size();
@@ -537,6 +571,8 @@ private:
             << ",\"F\":" << book.countLetter("F") << "}";
         out << ",\"topId\":" << book.topStudentId();
         out << ",\"riskId\":" << book.atRiskStudentId();
+        out << ",\"categories\":";
+        jsonCategories(out, nullptr);
         out << "}";
 
         out << ",\"students\":[";
@@ -554,6 +590,8 @@ private:
             out << ",\"trend\":" << jsonString(s.trend());
             out << ",\"highest\":" << fmt(s.highestScore(), 2);
             out << ",\"lowest\":" << fmt(s.lowestScore(), 2);
+            out << ",\"categories\":";
+            jsonCategories(out, &s);
             out << ",\"grades\":[";
             for (int i = 0; i < s.gradeCount(); i++) {
                 const GradeEntry& g = s.getGrades()[i];
@@ -570,7 +608,7 @@ private:
     void cmdHelp(std::ostream& out) {
         out << "Commands (text with spaces goes in \"quotes\"):\n"
             << "  add \"<name>\" [grade]                 add a student\n"
-            << "  grade <id> \"<label>\" <type> <score>  add a grade (test/quiz/project/homework)\n"
+            << "  grade <id> \"<label>\" <type> <score>  add a grade (homework/quiz/test/project/activity)\n"
             << "  assign \"<title>\" <type> <id>=<score> ...  grade the whole class at once\n"
             << "  edit <id> <#> <score> [\"<label>\"] [type]  change grade number #\n"
             << "  delgrade <id> <#>                    delete grade number #\n"

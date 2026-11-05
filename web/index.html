@@ -133,7 +133,7 @@
         <div>
           <p class="tile-label">Class average</p>
           <p class="hero-value"><span id="stat-average">0.0</span><span class="unit">%</span></p>
-          <p class="tile-sub" id="stat-average-delta">Weighted by assignment type</p>
+          <p class="tile-sub" id="stat-average-delta">Weighted by category</p>
         </div>
       </article>
       <article class="card tile">
@@ -256,6 +256,17 @@
       </div>
     </section>
 
+    <!-- ============ GRADING CATEGORIES ============ -->
+    <article class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Grading categories</h2>
+          <p class="card-sub">Each category's average counts for its share of the final grade. Categories with no grades yet are skipped.</p>
+        </div>
+      </div>
+      <div class="cats" id="cat-grid"></div>
+    </article>
+
     <!-- ============ STUDENT AVERAGES CHART ============ -->
     <article class="card">
       <div class="card-head">
@@ -346,6 +357,14 @@
       </div>
 
       <section class="d-section">
+        <h3>Categories</h3>
+        <table class="d-cats">
+          <thead><tr><th scope="col">Category</th><th scope="col" class="num">Weight</th><th scope="col" class="num">Average</th></tr></thead>
+          <tbody id="d-cats"></tbody>
+        </table>
+      </section>
+
+      <section class="d-section">
         <div class="d-section-head">
           <h3>Grade history</h3>
           <div class="legend legend-sm">
@@ -360,10 +379,7 @@
         <h3><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calc"/></svg>What do I need?</h3>
         <form class="need-form" id="need-form">
           <span>On the next</span>
-          <select id="need-type" aria-label="Assignment type">
-            <option value="test">Test</option><option value="quiz">Quiz</option>
-            <option value="project">Project</option><option value="homework">Homework</option>
-          </select>
+          <select id="need-type" class="type-select" data-default="project" data-plain aria-label="Category"></select>
           <span>to reach</span>
           <span class="input-suffix"><input id="need-target" type="number" min="1" max="100" step="0.5" value="90" aria-label="Target average percent"><span>%</span></span>
           <button class="btn btn-primary btn-sm" type="submit">Calculate</button>
@@ -376,10 +392,7 @@
         <ol class="grade-list" id="d-grades"></ol>
         <form class="add-grade" id="add-grade-form">
           <input id="g-label" placeholder="Assignment name" maxlength="40" required aria-label="Assignment name">
-          <select id="g-type" aria-label="Type">
-            <option value="test">Test ×2</option><option value="project">Project ×1.5</option>
-            <option value="quiz" selected>Quiz ×1</option><option value="homework">Homework ×0.5</option>
-          </select>
+          <select id="g-type" class="type-select" data-default="test" aria-label="Category"></select>
           <input id="g-score" type="number" min="0" max="120" step="0.1" placeholder="Score" required aria-label="Score">
           <button class="btn btn-primary btn-sm" type="submit"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"/></svg>Add</button>
         </form>
@@ -406,9 +419,9 @@
     <form method="dialog" class="modal-form" id="form-assign">
       <header class="modal-head"><h2>New class assignment</h2><button class="btn btn-ghost btn-icon" value="cancel" formnovalidate aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
       <div class="field-row">
-        <label class="field grow"><span>Title</span><input id="as-title" maxlength="40" required placeholder="Unit 3 Test" autocomplete="off"></label>
-        <label class="field"><span>Type</span>
-          <select id="as-type"><option value="test">Test ×2</option><option value="project">Project ×1.5</option><option value="quiz" selected>Quiz ×1</option><option value="homework">Homework ×0.5</option></select>
+        <label class="field grow"><span>Title</span><input id="as-title" maxlength="40" required placeholder="C++ Unit 2" autocomplete="off"></label>
+        <label class="field"><span>Category</span>
+          <select id="as-type" class="type-select" data-default="quiz"></select>
         </label>
       </div>
       <div class="as-tools"><span class="muted">One score per student. Leave a box blank to skip.</span>
@@ -461,8 +474,8 @@
       <header class="modal-head"><h2 id="edit-title">Edit grade</h2><button class="btn btn-ghost btn-icon" value="cancel" formnovalidate aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
       <label class="field"><span>Assignment name</span><input id="edit-label" maxlength="40" required></label>
       <div class="field-row">
-        <label class="field grow"><span>Type</span>
-          <select id="edit-type"><option value="test">Test ×2</option><option value="project">Project ×1.5</option><option value="quiz">Quiz ×1</option><option value="homework">Homework ×0.5</option></select>
+        <label class="field grow"><span>Category</span>
+          <select id="edit-type" class="type-select"></select>
         </label>
         <label class="field grow"><span>Score</span><input id="edit-score" type="number" min="0" max="120" step="0.1" required></label>
       </div>

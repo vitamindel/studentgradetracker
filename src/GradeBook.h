@@ -364,6 +364,21 @@ public:
         return worst;
     }
 
+    // Class average for one category (students with no grades in it are skipped), or -1.
+    double categoryClassAverage(const std::string& type) const {
+        double sum = 0;
+        int count = 0;
+        for (const Student& s : students) {
+            double avg = s.categoryAverage(type);
+            if (avg >= 0) {
+                sum += avg;
+                count++;
+            }
+        }
+        if (count == 0) return -1;
+        return sum / count;
+    }
+
     int countLetter(const std::string& letter) const {
         int count = 0;
         for (const Student& s : students) {
@@ -486,28 +501,31 @@ public:
         saveSnapshot("load demo");
         students.clear();
         nextId = 1001;
-        className = "Period 3 - Chemistry";
+        className = "Electronics/Computer Engineering 11";
 
-        const int NUM_ASSIGNMENTS = 7;
+        // Marking Period 1 so far (no Project yet, so that category is skipped).
+        const int NUM_ASSIGNMENTS = 9;
         std::string labels[NUM_ASSIGNMENTS] = {
-            "Homework 1", "Quiz 1: Atoms", "Unit 1 Test", "Lab Project",
-            "Quiz 2: Bonding", "Homework 2", "Unit 2 Test"};
+            "Security Findings", "Next Level Cyber", "Intro to Cybersecurity",
+            "Cryptography", "Cybersecurity Analysis", "Cybersecurity - AWS",
+            "Elec Symbols & Design", "C++ Beginners", "C++ Unit 1"};
         std::string types[NUM_ASSIGNMENTS] = {
-            "Homework", "Quiz", "Test", "Project", "Quiz", "Homework", "Test"};
+            "Class Activity", "Homework", "Quiz", "Homework", "Test", "Test",
+            "Quiz", "Class Activity", "Test"};
 
         const int NUM_STUDENTS = 8;
         std::string names[NUM_STUDENTS] = {
             "Ava Chen", "Marcus Johnson", "Priya Patel", "Diego Ramirez",
             "Sofia Rossi", "Ethan Brooks", "Hana Kim", "Liam O'Connor"};
         double scores[NUM_STUDENTS][NUM_ASSIGNMENTS] = {   // 2D array, like double[][] in Java
-            {95, 92, 94, 98, 96, 100, 97},
-            {78, 72, 70, 80, 75, 85, 74},
-            {88, 85, 90, 92, 89, 95, 91},
-            {60, 55, 58, 65, 62, 70, 66},
-            {82, 79, 84, 88, 86, 90, 85},
-            {50, 48, 52, 60, 45, 65, 49},
-            {70, 74, 76, 80, 82, 88, 85},
-            {92, 85, 80, 78, 75, 70, 68}};
+            {100, 100, 95, 100, 94, 96, 100, 100, 97},
+            {100, 80, 75, 70, 72, 68, 80, 100, 66},
+            {100, 100, 90, 100, 88, 91, 90, 100, 95},
+            {80, 60, 65, 70, 62, 58, 70, 80, 70},
+            {100, 90, 85, 90, 84, 82, 90, 100, 90},
+            {60, 50, 55, 40, 52, 48, 60, 80, 45},
+            {80, 70, 70, 80, 72, 78, 85, 100, 88},
+            {100, 100, 90, 90, 85, 78, 75, 80, 66}};
 
         for (int s = 0; s < NUM_STUDENTS; s++) {
             Student student(names[s], nextId, Student::NO_GRADE);

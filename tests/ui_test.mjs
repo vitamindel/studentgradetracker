@@ -76,13 +76,18 @@ check("first visit shows no 'Welcome back' toast", (await page.locator(".toast")
 await page.waitForTimeout(900);   // let number animations finish
 check("engine boots and pill says running", (await text("#engine-pill-text")) === "C++ engine running");
 check("first visit loads the 8-student demo", (await rows()) === 8, await rows());
-check("class average tile shows 77.0", (await text("#stat-average")) === "77.0", await text("#stat-average"));
-check("hero letter is C", (await text("#hero-letter")) === "C");
+check("class average tile shows 80.7", (await text("#stat-average")) === "80.7", await text("#stat-average"));
+check("hero letter is B", (await text("#hero-letter")) === "B");
 check("pass rate 75%", (await text("#stat-passrate")) === "75");
 check("status counts 6 / 1 / 1",
   `${await text("#count-passed")}/${await text("#count-needs")}/${await text("#count-failed")}` === "6/1/1");
 check("8 bars in the averages chart", (await page.locator(".hbar-row").count()) === 8);
 check("letter chart shows A=2", (await page.locator('.col[data-letter="A"] .col-value').innerText()) === "2");
+check("categories card shows the 5 weights from C++",
+  (await page.locator("#cat-grid .cat-weight").allInnerTexts()).join(" ").replace(/\s+/g, "") === "10%10%20%50%10%");
+check("empty Project category says so", (await page.locator("#cat-grid .cat").nth(3).innerText()).includes("No grades yet"));
+check("category dropdowns are filled from C++", (await page.locator("#g-type option").count()) === 5 &&
+  (await page.locator("#g-type").inputValue()) === "test");
 check("top student badge on Ava", (await page.locator("tr.is-top").innerText()).includes("Ava Chen"));
 check("at-risk badge on Ethan", (await page.locator("tr.is-risk").innerText()).includes("Ethan Brooks"));
 check("undo starts disabled (resetundo after load)", await page.locator("#undo-btn").isDisabled());
@@ -139,7 +144,9 @@ await settle();
 check("drawer opens with Ethan", (await text("#d-name")) === "Ethan Brooks");
 check("line chart drew score + running paths", (await page.locator("#d-chart path.lc-score").count()) === 1 &&
   (await page.locator("#d-chart path.lc-running").count()) === 1);
-check("grade list has 7 grades", (await page.locator("#d-grades li").count()) === 7);
+check("grade list has 9 grades", (await page.locator("#d-grades li").count()) === 9);
+check("drawer category table shows Ethan's Test average", (await page.locator("#d-cats tr").nth(2).innerText()).includes("48.3%"),
+  await page.locator("#d-cats tr").nth(2).innerText());
 await page.locator("#d-chart").hover({ position: { x: 200, y: 100 } });
 check("chart crosshair tooltip appears", await page.locator("#tooltip").isVisible());
 
@@ -148,22 +155,22 @@ await page.selectOption("#g-type", "test");
 await page.fill("#g-score", "95");
 await page.click('#add-grade-form button[type="submit"]');
 await settle();
-check("add grade -> 8 grades", (await page.locator("#d-grades li").count()) === 8, await lastToast());
+check("add grade -> 10 grades", (await page.locator("#d-grades li").count()) === 10, await lastToast());
 
-await page.locator('#d-grades [data-edit="8"]').click();
+await page.locator('#d-grades [data-edit="10"]').click();
 await page.fill("#edit-score", "90");
 await page.click('#form-edit button[value="ok"]');
 await settle();
-check("edit grade #8 -> 90.0", (await page.locator("#d-grades li").nth(7).locator(".g-score").innerText()) === "90.0", await lastToast());
+check("edit grade #10 -> 90.0", (await page.locator("#d-grades li").nth(9).locator(".g-score").innerText()) === "90.0", await lastToast());
 
-await page.locator('#d-grades [data-del="8"]').click();
+await page.locator('#d-grades [data-del="10"]').click();
 await settle();
-check("delete grade #8 -> 7 grades", (await page.locator("#d-grades li").count()) === 7, await lastToast());
+check("delete grade #10 -> 9 grades", (await page.locator("#d-grades li").count()) === 9, await lastToast());
 
-await page.selectOption("#need-type", "test");
-await page.fill("#need-target", "60");
+await page.selectOption("#need-type", "project");
+await page.fill("#need-target", "70");
 await page.click('#need-form button[type="submit"]');
-check("what-do-I-need answer comes from C++", (await text("#need-result")).startsWith("Ethan Brooks needs 93.8% on the next Test"),
+check("what-do-I-need answer comes from C++", (await text("#need-result")).startsWith("Ethan Brooks needs 86.2% on the next Project"),
   await text("#need-result"));
 await page.fill("#need-target", "99");
 await page.click('#need-form button[type="submit"]');
@@ -221,6 +228,7 @@ check("Undo button undoes the assignment", (await lastToast()) === "Undid: class
 // ---------------------------------------------------------------------
 // 7. Settings: class name + cutoffs
 // ---------------------------------------------------------------------
+const passedBefore = await text("#count-passed");
 await page.click("#class-name-btn");
 await page.fill("#set-name", "AP Chemistry, Period 3");
 await page.fill("#set-pass", "80");
@@ -228,7 +236,8 @@ await page.fill("#set-needs", "70");
 await page.click('#form-settings button[value="ok"]');
 await settle();
 check("class name updates in the header", (await text("#class-name")) === "AP Chemistry, Period 3");
-check("stricter cutoffs change the status counts", (await text("#count-passed")) !== "6", await text("#count-passed"));
+check("stricter cutoffs change the status counts", (await text("#count-passed")) !== passedBefore,
+  `${passedBefore} -> ${await text("#count-passed")}`);
 check("cutoff lines moved", (await page.locator(".cut-pass span").innerText()) === "Pass 80");
 
 // ---------------------------------------------------------------------

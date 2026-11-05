@@ -24,8 +24,16 @@ check("demo loads 8 students", out.trim() === "Loaded the demo class (8 students
 let s = state();
 check("json parses and has 8 students", s.students.length === 8);
 const ava = s.students.find((x) => x.name === "Ava Chen");
-// Ava by hand: (95*.5 + 92 + 94*2 + 98*1.5 + 96 + 100*.5 + 97*2) / 8.5 = 814.5 / 8.5 = 95.82
-check("Ava's weighted average is 95.82", ava.average === 95.82, String(ava.average));
+// Ava by hand: Homework 100, Quiz 97.5, Test (94+96+97)/3 = 95.67, Class Activity 100, no Project
+//   (100*10 + 97.5*10 + 95.67*20 + 100*10) / 50 = 97.77
+check("Ava's weighted average is 97.77", ava.average === 97.77, String(ava.average));
+check("weights are the class's 5 categories",
+  JSON.stringify(s.weights) === '{"Homework":10,"Quiz":10,"Test":20,"Project":50,"Class Activity":10}', JSON.stringify(s.weights));
+check("Ava's category averages (Project empty)",
+  ava.categories.Test === 95.67 && ava.categories.Project === null && ava.categories["Class Activity"] === 100,
+  JSON.stringify(ava.categories));
+check("class category averages: Test 76.04, Project none",
+  s.stats.categories.Test === 76.04 && s.stats.categories.Project === null, JSON.stringify(s.stats.categories));
 check("Ava is the top student", s.stats.topId === ava.id);
 const ethan = s.students.find((x) => x.name === "Ethan Brooks");
 check("Ethan is Failed and most at-risk", ethan.status === "Failed" && s.stats.riskId === ethan.id,
@@ -61,20 +69,33 @@ check("empty name is rejected", run('add "" 90').startsWith("Error"));
 out = run('grade 1004 "Unit 3 Test" test 90');
 check("grade adds to Diego", out.startsWith('Added Test "Unit 3 Test" (90.0) for Diego Ramirez'), out.trim());
 let diego = state().students.find((x) => x.id === 1004);
-check("Diego now has 8 grades", diego.grades.length === 8);
-out = run('edit 1004 8 95 "Unit 3 Test (retake)" test');
+check("Diego now has 10 grades", diego.grades.length === 10);
+out = run('edit 1004 10 95 "Unit 3 Test (retake)" test');
 diego = state().students.find((x) => x.id === 1004);
-check("edit changes score and label", diego.grades[7].score === 95 && diego.grades[7].label === "Unit 3 Test (retake)", out.trim());
+check("edit changes score and label", diego.grades[9].score === 95 && diego.grades[9].label === "Unit 3 Test (retake)", out.trim());
 check("edit of grade #99 is rejected", run("edit 1004 99 50").startsWith("Error"));
-out = run("delgrade 1004 8");
-check("delgrade removes it", state().students.find((x) => x.id === 1004).grades.length === 7, out.trim());
+out = run("delgrade 1004 10");
+check("delgrade removes it", state().students.find((x) => x.id === 1004).grades.length === 9, out.trim());
 
 // ---- need ----
-out = run("need 1006 test 60");
-// By hand: (60 * (8.5 + 2) - 52.06 * 8.5) / 2 = 93.75
-check("need gives a number for Ethan (60% target)", /Ethan Brooks needs 93\.[78]% on the next Test to reach 60\.0%/.test(out), out.trim());
+out = run("need 1006 project 70");
+// By hand: the other categories give 45*10 + 57.5*10 + 48.33*20 + 70*10 = 2691.67 over weight 50,
+//   so the Project must average (70 * 100 - 2691.67) / 50 = 86.17
+check("need for Ethan's first Project (70% target)", /Ethan Brooks needs 86\.2% on the next Project to reach 70\.0%/.test(out), out.trim());
+check("one Test can't get Ethan to 60% (needs 110)", run("need 1006 test 60").includes("110.0% on the next Test"));
 check("need says impossible when > 100", run("need 1006 quiz 99").includes("not possible"));
 check("need says already safe for Ava at 50%", run("need 1001 homework 50").includes("already safe"));
+
+// ---- categories ----
+out = run('grade 1006 "Circuit Project" project 90');
+// (2691.67 + 90 * 50) / 100 = 71.92: one Project is half the grade
+check("a Project counts for 50% once it exists", state().students.find((x) => x.id === 1006).average === 71.92, out.trim());
+run("undo");
+out = run('grade 1006 "Lab Day" activity 100');
+check("'activity' means Class Activity", out.startsWith('Added Class Activity "Lab Day"'), out.trim());
+run("undo");
+check('quoted "Class Activity" works as a type', run('grade 1006 "Lab Day" "Class Activity" 100').startsWith("Added Class Activity"));
+run("undo");
 
 // ---- class assignment (blank = skip) ----
 const before = state().students.find((x) => x.id === 1002).grades.length;

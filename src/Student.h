@@ -7,8 +7,8 @@
 
 // One grade in a student's history (a struct is a class with public members).
 struct GradeEntry {
-    std::string label;  // e.g. "Unit 2 Test"
-    std::string type;   // Test, Project, Quiz, or Homework
+    std::string label;  // e.g. "C++ Unit 1"
+    std::string type;   // a category: Homework, Quiz, Test, Project, Class Activity
     double score;       // 0 to 120 (over 100 = extra credit)
 };
 
@@ -20,38 +20,47 @@ private:
 
 public:
     static const int NO_GRADE = -1;   // "start with no grades"
+    static const int NUM_TYPES = 5;
 
     // Parameterized constructor: Student s("Ava Chen", 1001, 92);
     Student(const std::string& name, int id, double startingGrade) {
         this->name = name;
         this->id = id;
 
-        // The starting grade counts as a Quiz (normal 1x weight).
+        // The starting grade is recorded as a Quiz.
         if (startingGrade != NO_GRADE && isValidScore(startingGrade)) {
             grades.push_back({"Starting Grade", "Quiz", startingGrade});
         }
     }
 
-    // Turns "test", "T", "hw", ... into an official type name, or "" if invalid.
+    // The grading categories, in the same order as the school portal.
+    static std::string typeName(int index) {
+        std::string names[NUM_TYPES] = {"Homework", "Quiz", "Test", "Project", "Class Activity"};
+        return names[index];
+    }
+
+    // Turns "test", "T", "hw", "activity", ... into a category name, or "" if invalid.
     static std::string normalizeType(const std::string& raw) {
         std::string t = "";
         for (char c : raw) {
             t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
-        if (t == "test" || t == "t" || t == "exam")              return "Test";
-        if (t == "project" || t == "p" || t == "proj" || t == "lab") return "Project";
-        if (t == "quiz" || t == "q")                             return "Quiz";
-        if (t == "homework" || t == "h" || t == "hw")            return "Homework";
+        if (t == "homework" || t == "h" || t == "hw")                    return "Homework";
+        if (t == "quiz" || t == "q" || t == "quizzes")                   return "Quiz";
+        if (t == "test" || t == "t" || t == "tests" || t == "exam")      return "Test";
+        if (t == "project" || t == "p" || t == "proj" || t == "lab")     return "Project";
+        if (t == "class activity" || t == "activity" || t == "ca" || t == "classwork") return "Class Activity";
         return "";
     }
 
-    // How much each type counts toward the average.
+    // Each category's share of the final grade, in percent (they add up to 100).
     static double typeWeight(const std::string& type) {
-        if (type == "Test")     return 2.0;
-        if (type == "Project")  return 1.5;
-        if (type == "Quiz")     return 1.0;
-        if (type == "Homework") return 0.5;
-        return 0.0;
+        if (type == "Homework")       return 10;
+        if (type == "Quiz")           return 10;
+        if (type == "Test")           return 20;
+        if (type == "Project")        return 50;
+        if (type == "Class Activity") return 10;
+        return 0;
     }
 
     static bool isValidScore(double score) {
@@ -111,40 +120,52 @@ public:
         }
     }
 
+    // Sum and count of one category's scores among the first "count" grades.
     // Pass by reference (&): the answers go straight into the caller's variables.
-    void weightedTotals(double& weightedSum, double& totalWeight) const {
-        weightedSum = 0;
-        totalWeight = 0;
-        for (const GradeEntry& g : grades) {
-            double w = typeWeight(g.type);
-            weightedSum += g.score * w;
-            totalWeight += w;
+    void categoryTotals(const std::string& type, int count, double& sum, int& n) const {
+        sum = 0;
+        n = 0;
+        for (int i = 0; i < count && i < gradeCount(); i++) {
+            if (grades[i].type == type) {
+                sum += grades[i].score;
+                n++;
+            }
         }
     }
 
-    // Weighted average = sum(score x weight) / sum(weights)
-    double average() const {
-        double weightedSum, totalWeight;
-        weightedTotals(weightedSum, totalWeight);
-        if (totalWeight == 0) {
-            return 0;
+    // Average of one category, or -1 if it has no grades yet.
+    double categoryAverage(const std::string& type) const {
+        double sum;
+        int n;
+        categoryTotals(type, gradeCount(), sum, n);
+        if (n == 0) {
+            return -1;
         }
-        return weightedSum / totalWeight;
+        return sum / n;
     }
 
-    // Average using only the first "count" grades (for the running-average line).
+    // Weighted average of the first "count" grades: each category's average times its
+    // weight, divided by the weights used. Empty categories are skipped.
     double averageOfFirst(int count) const {
         double weightedSum = 0;
         double totalWeight = 0;
-        for (int i = 0; i < count && i < gradeCount(); i++) {
-            double w = typeWeight(grades[i].type);
-            weightedSum += grades[i].score * w;
-            totalWeight += w;
+        for (int t = 0; t < NUM_TYPES; t++) {
+            double sum;
+            int n;
+            categoryTotals(typeName(t), count, sum, n);
+            if (n > 0) {
+                weightedSum += typeWeight(typeName(t)) * (sum / n);
+                totalWeight += typeWeight(typeName(t));
+            }
         }
         if (totalWeight == 0) {
             return 0;
         }
         return weightedSum / totalWeight;
+    }
+
+    double average() const {
+        return averageOfFirst(gradeCount());
     }
 
     static std::string letterFor(double percent) {
@@ -200,16 +221,30 @@ public:
         return "steady";
     }
 
-    // Score needed on the next assignment to reach "target":
-    //   x = (target * (totalWeight + w) - weightedSum) / w
+    // Score needed on the next assignment of this type to reach "target".
+    // The other categories stay the same; this one's average becomes (sum + x) / (n + 1).
     double scoreNeeded(const std::string& rawType, double target) const {
-        double w = typeWeight(normalizeType(rawType));
-        if (w == 0) {
+        std::string type = normalizeType(rawType);
+        if (type == "") {
             return -1;
         }
-        double weightedSum, totalWeight;
-        weightedTotals(weightedSum, totalWeight);
-        return (target * (totalWeight + w) - weightedSum) / w;
+        double otherSum = 0;      // weight x average of the other graded categories
+        double otherWeight = 0;
+        for (int t = 0; t < NUM_TYPES; t++) {
+            double avg = categoryAverage(typeName(t));
+            if (typeName(t) != type && avg >= 0) {
+                otherSum += typeWeight(typeName(t)) * avg;
+                otherWeight += typeWeight(typeName(t));
+            }
+        }
+        double w = typeWeight(type);
+        double sum;
+        int n;
+        categoryTotals(type, gradeCount(), sum, n);
+
+        // Solve (otherSum + w * newCategoryAverage) / (otherWeight + w) = target
+        double newCategoryAverage = (target * (otherWeight + w) - otherSum) / w;
+        return newCategoryAverage * (n + 1) - sum;
     }
 
     double highestScore() const {

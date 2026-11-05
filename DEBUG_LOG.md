@@ -115,3 +115,16 @@ A running list of every real problem we hit while building the Student Grade Tra
 
 ### 15. A warning we decided to keep
 - `g++ -Wshadow` (stricter than the required `-Wall -Wextra`) warns that the constructor parameters `name` and `id` "shadow" the fields with the same names. We kept it that way on purpose: `this->name = name;` is the exact pattern from Java (AP CSA), and it's easy to explain. With the required flags (`-Wall -Wextra`), both the multi-file and single-file builds have **0 warnings**.
+
+## Stage 5: Matching our class's grading categories
+
+### 16. A test passed for the wrong reason, then failed for the wrong reason
+- **What happened:** After switching to our class's categories (Project 50%, Test 20%, the rest 10%), the browser test "stricter cutoffs change the status counts" failed: the Passed count was still 6.
+- **Cause:** The test checked `Passed !== "6"`, assuming 6 students passed *before* the cutoffs changed. But earlier in the same test we add a student (Zoe, 88), so it was really **7** before. With the new demo scores, raising the pass cutoff to 80 happened to drop it to exactly 6. The cutoffs worked fine, and the old version of the test had only passed by luck.
+- **Fix:** The test now saves the Passed count right before opening Settings and checks that it changed (it went 7 → 6).
+- **Lesson:** Compare against a value you measured, not a number you remember.
+
+### 17. The "Project" card was centered while the others weren't
+- **What happened:** In the new *Grading categories* card, the Project tile (no grades yet) had all its text centered, unlike the other four.
+- **Cause:** We marked it with the CSS class `empty`, but `.empty` already existed in our stylesheet for the roster's "No students yet" box, which centers everything.
+- **Fix:** Renamed our class to `no-grades`. Found by screenshotting the page instead of assuming the CSS was fine.

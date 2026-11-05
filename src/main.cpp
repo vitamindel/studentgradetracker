@@ -147,7 +147,7 @@ string readType(const string& prompt) {
         if (type != "") {
             return type;
         }
-        cout << paint("  Type must be test, quiz, project, or homework.\n", RED);
+        cout << paint("  Type must be homework, quiz, test, project, or activity.\n", RED);
     }
 }
 
@@ -237,7 +237,7 @@ void addGradeMenu(GradeBook& book) {
     if (id == 0) return;
     string label = readLine("  Assignment name: ");
     if (label.empty()) label = "Untitled";
-    string type = readType("  Type (test/quiz/project/homework): ");
+    string type = readType("  Category (homework/quiz/test/project/activity): ");
     double score = readDouble("  Score (0-120): ", 0, 120);
     book.addGrade(id, label, type, score);
     const Student* s = book.findById(id);
@@ -253,7 +253,7 @@ void classAssignmentMenu(GradeBook& book) {
     }
     string title = readLine("  Assignment title: ");
     if (title.empty()) title = "Untitled";
-    string type = readType("  Type (test/quiz/project/homework): ");
+    string type = readType("  Category (homework/quiz/test/project/activity): ");
     cout << paint("  Enter a score for each student (press Enter to skip someone).\n", DIM);
 
     vector<int> ids;
@@ -296,12 +296,21 @@ void reportCardMenu(GradeBook& book) {
         cout << "  No grades yet.\n";
         return;
     }
-    cout << paint("  #   Assignment              Type       Score  Weight", DIM) << "\n";
+    cout << paint("  #   Assignment              Category         Score", DIM) << "\n";
     int number = 1;
     for (const GradeEntry& g : s->getGrades()) {
-        cout << "  " << left << setw(4) << number << setw(24) << g.label << setw(9) << g.type << right
-             << setw(7) << g.score << "  x" << Student::typeWeight(g.type) << "\n";
+        cout << "  " << left << setw(4) << number << setw(24) << g.label << setw(15) << g.type << right
+             << setw(7) << g.score << "\n";
         number++;
+    }
+
+    // Like the "Grading Information" table on the school portal
+    cout << "\n" << paint("  Category          Weight   Average", DIM) << "\n";
+    for (int t = 0; t < Student::NUM_TYPES; t++) {
+        string type = Student::typeName(t);
+        double avg = s->categoryAverage(type);
+        cout << "  " << left << setw(18) << type << right << setw(5) << static_cast<int>(Student::typeWeight(type))
+             << "%" << setw(10) << (avg >= 0 ? oneDecimal(avg) : "--") << "\n";
     }
     string status = book.statusOf(*s);
     cout << "\n  Weighted average: " << paint(oneDecimal(s->average()) + "%", BOLD)
@@ -324,6 +333,14 @@ void statsMenu(const GradeBook& book) {
     cout << "  " << paint("Passed " + to_string(book.countStatus("Passed")), GREEN)
          << "    " << paint("Needs Improvement " + to_string(book.countStatus("Needs Improvement")), YELLOW)
          << "    " << paint("Failed " + to_string(book.countStatus("Failed")), RED) << "\n";
+
+    cout << "\n  " << paint("Category averages", BOLD) << "\n";
+    for (int t = 0; t < Student::NUM_TYPES; t++) {
+        string type = Student::typeName(t);
+        double avg = book.categoryClassAverage(type);
+        cout << "  " << left << setw(16) << type << right << setw(3) << static_cast<int>(Student::typeWeight(type))
+             << "%   " << (avg >= 0 ? oneDecimal(avg) : paint("no grades yet", DIM)) << "\n";
+    }
 
     // Chart 1: each student's average (1 '#' = 2.5 points)
     cout << "\n  " << paint("Student averages", BOLD)
@@ -361,7 +378,7 @@ void whatDoINeedMenu(GradeBook& book) {
     printHeader("What Do I Need?");
     int id = readStudentId(book);
     if (id == 0) return;
-    string type = readType("  Next assignment type (test/quiz/project/homework): ");
+    string type = readType("  Next assignment category (homework/quiz/test/project/activity): ");
     double target = readDouble("  Target average (%): ", 1, 100);
     const Student* s = book.findById(id);
     double needed = s->scoreNeeded(type, target);
@@ -468,16 +485,16 @@ int main() {
     cout << fixed << setprecision(1);   // 1 decimal place everywhere
 
     cout << "\n" << paint("  ===  STUDENT GRADE TRACKER  ===", BOLD + ";" + CYAN) << "\n";
-    cout << paint("  Weights: Test x2, Project x1.5, Quiz x1, Homework x0.5", DIM) << "\n";
+    cout << paint("  Weights: Homework 10%, Quiz 10%, Test 20%, Project 50%, Class Activity 10%", DIM) << "\n";
 
     // 3 Student objects made with the parameterized constructor (name, ID, starting grade)
     Student student1("Ava Chen", 1001, 92.5);
     Student student2("Marcus Johnson", 1002, 72.0);
     Student student3("Ethan Brooks", 1003, 55.0);
 
-    student1.addGrade("Unit 1 Test", "Test", 95);
-    student2.addGrade("Unit 1 Test", "Test", 62);
-    student3.addGrade("Unit 1 Test", "Test", 50);
+    student1.addGrade("C++ Unit 1", "Test", 95);
+    student2.addGrade("C++ Unit 1", "Test", 62);
+    student3.addGrade("C++ Unit 1", "Test", 50);
 
     double passCutoff = 70;
     double needsCutoff = 60;
@@ -492,7 +509,7 @@ int main() {
 
     // Move the 3 objects into a GradeBook for the menu.
     GradeBook book;
-    book.setClassName("Period 3 - Chemistry");
+    book.setClassName("Electronics/Computer Engineering 11");
     book.addExistingStudent(student1);
     book.addExistingStudent(student2);
     book.addExistingStudent(student3);

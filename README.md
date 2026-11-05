@@ -27,8 +27,8 @@ web/
 onlinegdb/GradeTracker_SingleFile.cpp   all headers + main.cpp in one file (generated)
 tests/
   console_input.txt   scripted input for the terminal version
-  engine_test.mjs     53 checks that run the real .wasm in Node
-  ui_test.mjs         63 checks that click through the website in headless Chrome
+  engine_test.mjs     60 checks that run the real .wasm in Node
+  ui_test.mjs         67 checks that click through the website in headless Chrome
 tools/make_single_file.py   builds the OnlineGDB file
 build.sh / build.ps1        rebuild everything
 vercel.json                 tells Vercel to serve the web/ folder
@@ -110,8 +110,8 @@ python -m ziglang c++ -target wasm32-wasi -Os -s -fno-exceptions -mexec-model=re
 ## 6. Tests
 
 ```bash
-node tests/engine_test.mjs               # 53 checks on the real .wasm (needs Node 18+)
-cd tests && npm install && node ui_test.mjs   # 63 browser checks; uses your installed Chrome or Edge
+node tests/engine_test.mjs               # 60 checks on the real .wasm (needs Node 18+)
+cd tests && npm install && node ui_test.mjs   # 67 browser checks; uses your installed Chrome or Edge
 ```
 
 The UI test saves screenshots to `build/shots/`.
@@ -136,9 +136,9 @@ Type any of these into the **C++ Console** at the bottom of the website, or in *
 | `stats` | `stats` | class statistics with text bar charts |
 | `curve <points> [preview]` | `curve 5 preview` | add points to every grade (max 100) |
 | `thresholds <pass> <needs>` | `thresholds 70 60` | change status cutoffs |
-| `classname <name>` | `classname AP Chemistry` | rename the class |
+| `classname <name>` | `classname Electronics/Computer Engineering 11` | rename the class |
 | `undo` / `demo` / `clear` | | undo, load the sample class, remove everyone |
 | `export` / `import` | | CSV out / CSV in (`import` reads the following lines) |
 | `json` | | the whole class as JSON (what the website draws from) |
 
-Grade weights: **Test ×2, Project ×1.5, Quiz ×1, Homework ×0.5.** Default status cutoffs: **Passed ≥ 70, Needs Improvement ≥ 60, below that Failed.**
+Grading categories (same as the school portal): **Homework 10%, Quiz 10%, Test 20%, Project 50%, Class Activity 10%.** Each category is averaged first, then the categories are weighted; categories with no grades yet are skipped. Types can be typed as `homework`/`hw`, `quiz`, `test`, `project`, or `activity`/`ca`. Default status cutoffs: **Passed ≥ 70, Needs Improvement ≥ 60, below that Failed.**
