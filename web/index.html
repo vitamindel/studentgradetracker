@@ -332,45 +332,6 @@
       </div>
       <div class="hbars" id="avg-chart"></div>
     </article>
-
-    <!-- ============ ABOUT / HOW IT WORKS ============ -->
-    <section class="about" id="about" aria-labelledby="about-title">
-      <div class="about-head">
-        <p class="eyebrow">Under the hood</p>
-        <h2 id="about-title">Every button is a C++ <code>cin</code> / <code>cout</code> conversation</h2>
-        <p class="about-lead">This page has no grade logic in JavaScript. Each click builds a text command, hands it to a C++ function called <code>run()</code>, and C++ reads it with <code>cin</code> and answers with <code>cout</code>. Open the <button type="button" class="link" data-action="console">C++ console</button> to watch it happen.</p>
-      </div>
-
-      <ol class="pipeline" aria-label="How a click travels">
-        <li><span class="pipe-step">1</span><strong>Click</strong><span>JavaScript builds a command like <code>grade 1001 "Quiz 3" quiz 88</code></span></li>
-        <li><span class="pipe-step">2</span><strong>run()</strong><span>The text goes into WebAssembly. <code>cin</code> is pointed at it, and <code>cout</code> at an empty string.</span></li>
-        <li><span class="pipe-step">3</span><strong>CommandShell</strong><span>Reads the command word with <code>cin &gt;&gt;</code> and calls the right method</span></li>
-        <li><span class="pipe-step">4</span><strong>GradeBook + Student</strong><span>The objects do the math: weighted averages, status, curve…</span></li>
-        <li><span class="pipe-step">5</span><strong>cout</strong><span>C++ writes a reply (and a <code>json</code> snapshot of the class)</span></li>
-        <li><span class="pipe-step">6</span><strong>UI</strong><span>JavaScript draws what C++ said: toasts, tables, charts</span></li>
-      </ol>
-
-      <div class="card concepts-card">
-        <table class="concepts">
-          <thead><tr><th scope="col">C++ concept</th><th scope="col">Where it lives</th><th scope="col">What it powers here</th></tr></thead>
-          <tbody>
-            <tr><td>Variables &amp; data types</td><td><code>double score</code>, <code>int id</code>, <code>std::string name</code>, <code>bool</code></td><td>Every number on this page</td></tr>
-            <tr><td><code>cin</code> / <code>cout</code></td><td><code>web_main.cpp → run()</code>, <code>CommandShell::execute()</code></td><td>Every button and the console box</td></tr>
-            <tr><td>if / else</td><td><code>Student::status()</code>, <code>letterGrade()</code></td><td>Status chips and letter grades</td></tr>
-            <tr><td>Loops</td><td><code>average()</code>, <code>sortBy()</code> (selection sort), <code>cmdJson()</code></td><td>Averages, sorting, the chart data</td></tr>
-            <tr><td>Classes &amp; objects</td><td><code>Student</code>, <code>GradeBook</code>, <code>CommandShell</code></td><td>Each roster row is one <code>Student</code> object</td></tr>
-            <tr><td>public / private</td><td><code>Student</code>'s private <code>name</code>, <code>id</code>, <code>grades</code></td><td>Data can only change through checked methods</td></tr>
-            <tr><td>Methods</td><td><code>average()</code>, <code>gpa()</code>, <code>trend()</code>, <code>scoreNeeded()</code></td><td>Detail panel and "What do I need?"</td></tr>
-            <tr><td>Parameterized constructor</td><td><code>Student(name, id, startingGrade)</code></td><td>The "Add student" button</td></tr>
-            <tr><td>Calculations</td><td><code>classAverage()</code>, <code>median()</code>, <code>standardDeviation()</code></td><td>The dashboard tiles</td></tr>
-            <tr><td>Vectors, references, pointers</td><td><code>std::vector&lt;Student&gt;</code>, <code>findById()</code> returns <code>Student*</code></td><td>The roster list and editing a student</td></tr>
-            <tr><td>Copying objects</td><td><code>GradeBook::saveSnapshot()</code>, <code>curvedCopy()</code></td><td>Undo and the live curve preview</td></tr>
-            <tr><td>String streams</td><td><code>istringstream</code> / <code>ostringstream</code></td><td>Parsing commands and CSV import/export</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="about-foot">Built with C++17, compiled to WebAssembly with <code>zig c++ -target wasm32-wasi</code>. The same classes also run as a terminal program (<code>src/main.cpp</code>).</p>
-    </section>
   </main>
 
   <!-- ============ STUDENT DETAIL DRAWER ============ -->
